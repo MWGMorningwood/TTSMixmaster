@@ -388,8 +388,7 @@ class TTSMixmasterApp:
         self.tts_nickname_entry = ctk.CTkEntry(nickname_row, textvariable=self.tts_nickname_var,
                                               placeholder_text="Object nickname (uses playlist name if empty)")
         self.tts_nickname_entry.pack(side="left", fill="x", expand=True, padx=5)
-        
-        # Description field
+          # Description field
         desc_row = ctk.CTkFrame(custom_frame)
         desc_row.pack(fill="x", pady=2)
         
@@ -398,6 +397,26 @@ class TTSMixmasterApp:
         self.tts_description_entry = ctk.CTkEntry(desc_row, textvariable=self.tts_description_var,
                                                  placeholder_text="Object description (auto-generated if empty)")
         self.tts_description_entry.pack(side="left", fill="x", expand=True, padx=5)
+        
+        # Image URL field
+        image_row = ctk.CTkFrame(custom_frame)
+        image_row.pack(fill="x", pady=2)
+        
+        ctk.CTkLabel(image_row, text="Image URL:", width=100).pack(side="left", padx=5)
+        self.tts_image_url_var = ctk.StringVar()
+        self.tts_image_url_entry = ctk.CTkEntry(image_row, textvariable=self.tts_image_url_var,
+                                               placeholder_text="Primary image URL (uses default Steam Workshop image if empty)")
+        self.tts_image_url_entry.pack(side="left", fill="x", expand=True, padx=5)
+        
+        # Secondary Image URL field
+        image2_row = ctk.CTkFrame(custom_frame)
+        image2_row.pack(fill="x", pady=2)
+        
+        ctk.CTkLabel(image2_row, text="Secondary URL:", width=100).pack(side="left", padx=5)
+        self.tts_image_secondary_url_var = ctk.StringVar()
+        self.tts_image_secondary_url_entry = ctk.CTkEntry(image2_row, textvariable=self.tts_image_secondary_url_var,
+                                                         placeholder_text="Secondary image URL (uses default Steam Workshop image if empty)")
+        self.tts_image_secondary_url_entry.pack(side="left", fill="x", expand=True, padx=5)
         
         # Action buttons
         button_frame = ctk.CTkFrame(controls_frame)
@@ -805,14 +824,14 @@ Status: {status}        """.strip().format(
                     local_files = [result.file_path for result in self.download_results 
                                  if result.success and result.file_path is not None]
                 music_player = self.formatter.create_music_player(playlist, local_files=local_files)
-            
-            # Get customization options
+              # Get customization options
             nickname = self.tts_nickname_var.get().strip()
             description = self.tts_description_var.get().strip()
+            image_url = self.tts_image_url_var.get().strip()
+            image_secondary_url = self.tts_image_secondary_url_var.get().strip()
             use_simple_format = self.use_simple_format_var.get()
             output_format = self.output_format_var.get()
-            
-            # Generate appropriate code based on format
+              # Generate appropriate code based on format
             if output_format == "lua":
                 if use_simple_format:
                     code = self.formatter.generate_simple_playlist_lua(music_player)
@@ -825,7 +844,9 @@ Status: {status}        """.strip().format(
                     music_player=music_player,
                     nickname=nickname,
                     description=description,
-                    use_simple_format=use_simple_format
+                    use_simple_format=use_simple_format,
+                    image_url=image_url,
+                    image_secondary_url=image_secondary_url
                 )
                 code = json.dumps(save_data, indent=2, ensure_ascii=False)
             else:  # "all"
@@ -840,7 +861,9 @@ Status: {status}        """.strip().format(
                     music_player=music_player,
                     nickname=nickname,
                     description=description,
-                    use_simple_format=use_simple_format
+                    use_simple_format=use_simple_format,
+                    image_url=image_url,
+                    image_secondary_url=image_secondary_url
                 )
                 save_code = json.dumps(save_data, indent=2, ensure_ascii=False)
                 
@@ -849,13 +872,14 @@ Status: {status}        """.strip().format(
             # Display in preview
             self.tts_preview_text.delete("1.0", tk.END)
             self.tts_preview_text.insert("1.0", code)
-            
-            # Save files with custom options
+              # Save files with custom options
             saved_files = self.formatter.save_formatted_files(
                 music_player=music_player,
                 nickname=nickname,
                 description=description,
-                use_simple_format=use_simple_format
+                use_simple_format=use_simple_format,
+                image_url=image_url,
+                image_secondary_url=image_secondary_url
             )
             
             self._update_status(f"TTS code generated and saved to {len(saved_files)} files")

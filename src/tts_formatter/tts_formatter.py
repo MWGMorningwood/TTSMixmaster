@@ -352,14 +352,14 @@ return {object_name}"""
             music_player: TTSMusicPlayer object
             
         Returns:
-            JSON string
-        """
+            JSON string        """
         data = music_player.to_dict()
         return json.dumps(data, indent=2, ensure_ascii=False)
     
     def generate_save_file(self, music_player: TTSMusicPlayer, 
                           object_guid: Optional[str] = None, nickname: str = "", 
-                          description: str = "", use_simple_format: bool = True) -> Dict[str, Any]:
+                          description: str = "", use_simple_format: bool = True,
+                          image_url: str = "", image_secondary_url: str = "") -> Dict[str, Any]:
         """
         Generate TTS save file structure for the music player
         
@@ -369,6 +369,8 @@ return {object_name}"""
             nickname: Custom nickname for the object (uses playlist name if empty)
             description: Custom description for the object (auto-generated if empty)
             use_simple_format: Whether to use the simple playlist format like Woody's Progressive Metal
+            image_url: Custom image URL for the TTS object (uses default if empty)
+            image_secondary_url: Custom secondary image URL for the TTS object (uses default if empty)
             
         Returns:
             Save file dictionary
@@ -385,12 +387,18 @@ return {object_name}"""
         # Use custom description or generate a default one
         if not description:
             description = f"Music Player with {len(music_player.playlist)} tracks"
-        
-        # Choose the appropriate Lua script format
+          # Choose the appropriate Lua script format
         if use_simple_format:
             object_lua_script = self.generate_simple_playlist_lua(music_player)
         else:
             object_lua_script = self.generate_lua_script(music_player)
+        
+        # Use custom image URLs or defaults
+        default_image_url = "https://steamusercontent-a.akamaihd.net/ugc/9672878331288570/AE7A2999E8CD0EFF71210D7961A41E1F87F9DE78/"
+        default_secondary_url = "https://steamusercontent-a.akamaihd.net/ugc/1778335968028979741/9DA6ABA2450EBDA4E967816C4FA92289A638DB53/"
+        
+        final_image_url = image_url.strip() if image_url.strip() else default_image_url
+        final_secondary_url = image_secondary_url.strip() if image_secondary_url.strip() else default_secondary_url
         
         save_data = {
             "SaveName": "",
@@ -449,17 +457,16 @@ return {object_name}"""
                     "Sticky": True,
                     "Tooltip": True,
                     "GridProjection": False,
-                    "HideWhenFaceDown": False,
-                    "Hands": False,                    "CustomImage": {
-                        "ImageURL": "https://steamusercontent-a.akamaihd.net/ugc/9672878331288570/AE7A2999E8CD0EFF71210D7961A41E1F87F9DE78/",
-                        "ImageSecondaryURL": "https://steamusercontent-a.akamaihd.net/ugc/1778335968028979741/9DA6ABA2450EBDA4E967816C4FA92289A638DB53/",
+                    "HideWhenFaceDown": False,                    "Hands": False,
+                    "CustomImage": {
+                        "ImageURL": final_image_url,
+                        "ImageSecondaryURL": final_secondary_url,
                         "WidthScale": 0,
                         "CustomTile": {
                             "Type": 3,
                             "Thickness": 0.1,
                             "Stackable": False,
-                            "Stretch": False
-                        }
+                            "Stretch": False                        }
                     },
                     "LuaScript": object_lua_script,
                     "LuaScriptState": "",
@@ -473,7 +480,8 @@ return {object_name}"""
     def save_formatted_files(self, music_player: TTSMusicPlayer, 
                            base_filename: Optional[str] = None, 
                            nickname: str = "", description: str = "",
-                           use_simple_format: bool = True) -> Dict[str, str]:
+                           use_simple_format: bool = True,
+                           image_url: str = "", image_secondary_url: str = "") -> Dict[str, str]:
         """
         Save all formatted files (Lua, JSON, Save file)
         
@@ -483,6 +491,8 @@ return {object_name}"""
             nickname: Custom nickname for TTS object
             description: Custom description for TTS object
             use_simple_format: Whether to use simple playlist format
+            image_url: Custom image URL for the TTS object (uses default if empty)
+            image_secondary_url: Custom secondary image URL for the TTS object (uses default if empty)
             
         Returns:
             Dictionary with file paths
@@ -513,12 +523,13 @@ return {object_name}"""
         json_path = self.output_path / f"{base_filename}_data.json"
         with open(json_path, 'w', encoding='utf-8') as f:
             f.write(json_data)
-        saved_files['json'] = str(json_path)
-        
+        saved_files['json'] = str(json_path)        
         # Save TTS save file
         save_data = self.generate_save_file(music_player, nickname=nickname, 
                                           description=description, 
-                                          use_simple_format=use_simple_format)
+                                          use_simple_format=use_simple_format,
+                                          image_url=image_url,
+                                          image_secondary_url=image_secondary_url)
         save_path = self.output_path / f"{base_filename}.json"
         with open(save_path, 'w', encoding='utf-8') as f:
             json.dump(save_data, f, indent=2, ensure_ascii=False)
