@@ -2,7 +2,7 @@
 
 A comprehensive tool for exporting your favorite playlists to Tabletop Simulator playlist chips meant for usage with the [Music Box](https://steamcommunity.com/sharedfiles/filedetails/?id=3114355269). This application allows you to fetch playlists from Last.fm, download MP3 files, upload them to Azure Blob Storage and generate formatted Lua code for use in Tabletop Simulator.
 
-[Application Screenshot](./Screenshot 2025-06-22 141024.png)
+![Application Screenshot](./Screenshot%202025-06-22%20141024.png)
 
 ## Features
 
