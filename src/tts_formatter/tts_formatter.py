@@ -12,7 +12,8 @@ from typing import Dict, List, Optional, Any, Union
 from dataclasses import dataclass, asdict
 import urllib.parse
 
-from ..api.lastfm_client import Track, Playlist
+from ..api.base_service import Track
+from ..api.lastfm_client import Playlist
 from ..uploader.azure_uploader import UploadResult
 
 
@@ -146,6 +147,57 @@ class TTSFormatter:
             name=player_name,
             playlist=audio_objects
         )
+    
+    def create_music_player_from_playlist_info(self, playlist_info, 
+                                              upload_results: Optional[List[UploadResult]] = None,
+                                              local_files: Optional[List[str]] = None,
+                                              player_name: str = "") -> TTSMusicPlayer:
+        """
+        Create a TTS music player from a PlaylistInfo object (new format)
+        
+        Args:
+            playlist_info: PlaylistInfo object with tracks using base_service.Track format
+            upload_results: List of workshop upload results
+            local_files: List of local file paths
+            player_name: Name for the music player
+            
+        Returns:
+            TTSMusicPlayer object
+        """
+        if not player_name:
+            player_name = playlist_info.name
+        
+        audio_objects = []
+        
+        if not playlist_info.tracks:
+            return TTSMusicPlayer(name=player_name, playlist=audio_objects)
+        
+        for i, track in enumerate(playlist_info.tracks):
+            workshop_url = ""
+            local_url = ""
+            
+            # Try to get workshop URL
+            if upload_results and i < len(upload_results):
+                result = upload_results[i]
+                if result.success and result.public_url:
+                    workshop_url = result.public_url
+            
+            # Try to get local file URL
+            if local_files and i < len(local_files):
+                local_path = local_files[i]
+                if local_path and os.path.exists(local_path):
+                    # Convert to file:// URL for local files
+                    local_url = f"file://{urllib.parse.quote(os.path.abspath(local_path))}"
+            
+            # Create audio object
+            audio_obj = self.create_audio_object(
+                track=track,
+                workshop_url=workshop_url,
+                local_url=local_url
+            )
+            audio_objects.append(audio_obj)
+        
+        return TTSMusicPlayer(name=player_name, playlist=audio_objects)
     
     def generate_lua_script(self, music_player: TTSMusicPlayer, 
                            object_name: str = "MusicPlayer") -> str:

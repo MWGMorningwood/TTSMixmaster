@@ -36,7 +36,7 @@ class DownloadError(Exception):
     """General download error for the audio downloader"""
     pass
 
-from ..api.lastfm_client import Track
+from ..api.base_service import Track
 
 
 @dataclass

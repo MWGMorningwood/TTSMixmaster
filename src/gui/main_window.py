@@ -10,13 +10,16 @@ import customtkinter as ctk
 from typing import List, Optional, Dict, Any
 import threading
 import os
+import json
 from pathlib import Path
 
 from ..api.lastfm_client import LastFMAPI, Playlist, Track
+from ..api.base_service import PlaylistInfo
 from ..downloader.audio_downloader import AudioDownloader, DownloadResult
 from ..uploader.azure_uploader import AzureBlobUploader, UploadResult
 from ..tts_formatter.tts_formatter import TTSFormatter, TTSMusicPlayer
 from ..utils.config import ConfigManager, AppConfig, setup_logging
+from .playlist_tab import PlaylistTabManager
 
 
 class TTSMixmasterApp:
@@ -30,20 +33,23 @@ class TTSMixmasterApp:
         
         # Set up logging
         setup_logging()
-        
-        # Initialize API clients
+          # Initialize API clients
         self.lastfm_api = None
         self.downloader = None
         self.uploader = None
         self.formatter = None
         
-        # Initialize GUI
-        self._setup_gui()
-        
         # Data storage
-        self.current_playlists: List[Playlist] = []
+        self.current_playlists: List[Playlist] = []  # Legacy
+        self.new_playlists: List[PlaylistInfo] = []  # New format
         self.download_results: List[DownloadResult] = []
         self.upload_results: List[UploadResult] = []
+        
+        # Playlist tab manager
+        self.playlist_tab_manager: Optional[PlaylistTabManager] = None
+        
+        # Initialize GUI
+        self._setup_gui()
         
         # Load configuration
         self._load_config_to_gui()
@@ -72,10 +78,9 @@ class TTSMixmasterApp:
         # Create tabview
         self.tabview = ctk.CTkTabview(self.main_frame)
         self.tabview.pack(fill="both", expand=True, padx=10, pady=10)
-        
-        # Create tabs
+          # Create tabs
         self._create_config_tab()
-        self._create_playlist_tab()
+        self._create_new_playlist_tab()  # New playlist tab
         self._create_download_tab()
         self._create_upload_tab()
         self._create_format_tab()
@@ -100,14 +105,41 @@ class TTSMixmasterApp:
         ctk.CTkLabel(lastfm_frame, text="Last.fm Settings").pack(anchor="w", padx=5, pady=2)
         
         self.lastfm_api_key_entry = ctk.CTkEntry(lastfm_frame, placeholder_text="Last.fm API Key")
-        self.lastfm_api_key_entry.pack(fill="x", padx=5, pady=2)
-        
+        self.lastfm_api_key_entry.pack(fill="x", padx=5, pady=2)        
         self.lastfm_api_secret_entry = ctk.CTkEntry(lastfm_frame, placeholder_text="Last.fm API Secret")
         self.lastfm_api_secret_entry.pack(fill="x", padx=5, pady=2)
         
         self.lastfm_username_entry = ctk.CTkEntry(lastfm_frame, placeholder_text="Last.fm Username")
         self.lastfm_username_entry.pack(fill="x", padx=5, pady=2)
-          # Azure Storage settings
+        
+        # YouTube API settings
+        youtube_frame = ctk.CTkFrame(api_frame)
+        youtube_frame.pack(fill="x", padx=10, pady=5)
+        
+        ctk.CTkLabel(youtube_frame, text="YouTube Settings").pack(anchor="w", padx=5, pady=2)
+        
+        self.youtube_api_key_entry = ctk.CTkEntry(youtube_frame, placeholder_text="YouTube Data API v3 Key")
+        self.youtube_api_key_entry.pack(fill="x", padx=5, pady=2)
+        
+        self.youtube_channel_id_entry = ctk.CTkEntry(youtube_frame, placeholder_text="YouTube Channel ID (optional)")
+        self.youtube_channel_id_entry.pack(fill="x", padx=5, pady=2)
+        
+        # Spotify API settings
+        spotify_frame = ctk.CTkFrame(api_frame)
+        spotify_frame.pack(fill="x", padx=10, pady=5)
+        
+        ctk.CTkLabel(spotify_frame, text="Spotify Settings").pack(anchor="w", padx=5, pady=2)
+        
+        self.spotify_client_id_entry = ctk.CTkEntry(spotify_frame, placeholder_text="Spotify Client ID")
+        self.spotify_client_id_entry.pack(fill="x", padx=5, pady=2)
+        
+        self.spotify_client_secret_entry = ctk.CTkEntry(spotify_frame, placeholder_text="Spotify Client Secret", show="*")
+        self.spotify_client_secret_entry.pack(fill="x", padx=5, pady=2)
+        
+        self.spotify_user_id_entry = ctk.CTkEntry(spotify_frame, placeholder_text="Spotify User ID (optional)")
+        self.spotify_user_id_entry.pack(fill="x", padx=5, pady=2)
+        
+        # Azure Storage settings
         azure_frame = ctk.CTkFrame(api_frame)
         azure_frame.pack(fill="x", padx=10, pady=5)
         
@@ -188,8 +220,22 @@ class TTSMixmasterApp:
         
         ctk.CTkButton(button_frame, text="Save Configuration", command=self._save_config).pack(side="left", padx=5)
         ctk.CTkButton(button_frame, text="Test Last.fm Connection", command=self._test_lastfm_connection).pack(side="left", padx=5)
+        ctk.CTkButton(button_frame, text="Test YouTube Connection", command=self._test_youtube_connection).pack(side="left", padx=5)
+        ctk.CTkButton(button_frame, text="Test Spotify Connection", command=self._test_spotify_connection).pack(side="left", padx=5)
         ctk.CTkButton(button_frame, text="Test Azure Connection", command=self._test_azure_connection).pack(side="left", padx=5)
     
+    def _create_new_playlist_tab(self):
+        """Create the new multi-service playlist tab"""
+        try:
+            tab = self.tabview.add("Collections & Playlists")
+            self.playlist_tab_manager = PlaylistTabManager(tab, self.config_manager, self)
+        except Exception as e:
+            print(f"Error initializing playlist tab manager: {e}")
+            import traceback
+            traceback.print_exc()
+            self.playlist_tab_manager = None
+    
+    # Legacy playlist tab (keeping for now for backwards compatibility)
     def _create_playlist_tab(self):
         """Create playlist management tab"""
         tab = self.tabview.add("Playlists")
@@ -448,17 +494,30 @@ class TTSMixmasterApp:
     
     def _load_config_to_gui(self):
         """Load configuration values to GUI elements"""
+        # Last.fm settings
         self.lastfm_api_key_entry.insert(0, self.config.lastfm_api_key)
         self.lastfm_api_secret_entry.insert(0, self.config.lastfm_api_secret)
         self.lastfm_username_entry.insert(0, self.config.lastfm_username)
-        # Load Azure settings
+        
+        # YouTube settings
+        self.youtube_api_key_entry.insert(0, self.config.youtube_api_key)
+        self.youtube_channel_id_entry.insert(0, self.config.youtube_channel_id)
+        
+        # Spotify settings
+        self.spotify_client_id_entry.insert(0, self.config.spotify_client_id)
+        self.spotify_client_secret_entry.insert(0, self.config.spotify_client_secret)
+        self.spotify_user_id_entry.insert(0, self.config.spotify_user_id)
+        
+        # Azure settings
         self.azure_connection_entry.insert(0, self.config.azure_storage_connection_string)
         self.azure_container_entry.insert(0, self.config.azure_container_name)
         
+        # Path settings
         self.download_path_entry.insert(0, self.config.download_path)
         self.upload_path_entry.insert(0, self.config.upload_path)
         self.tts_path_entry.insert(0, self.config.tts_output_path)
         
+        # Audio settings
         self.audio_quality_var.set(self.config.audio_quality)
     
     def _browse_folder(self, entry_widget):
@@ -472,18 +531,33 @@ class TTSMixmasterApp:
         """Save configuration from GUI"""
         try:
             self.config_manager.update_config(
+                # Last.fm settings
                 lastfm_api_key=self.lastfm_api_key_entry.get(),
                 lastfm_api_secret=self.lastfm_api_secret_entry.get(),
                 lastfm_username=self.lastfm_username_entry.get(),
+                # YouTube settings
+                youtube_api_key=self.youtube_api_key_entry.get(),
+                youtube_channel_id=self.youtube_channel_id_entry.get(),
+                # Spotify settings
+                spotify_client_id=self.spotify_client_id_entry.get(),
+                spotify_client_secret=self.spotify_client_secret_entry.get(),
+                spotify_user_id=self.spotify_user_id_entry.get(),
+                # Azure settings
                 azure_storage_connection_string=self.azure_connection_entry.get(),
                 azure_container_name=self.azure_container_entry.get(),
+                # Path settings
                 download_path=self.download_path_entry.get(),
                 upload_path=self.upload_path_entry.get(),
                 tts_output_path=self.tts_path_entry.get(),
-                audio_quality=self.audio_quality_var.get()
-            )
+                # Audio settings
+                audio_quality=self.audio_quality_var.get()            )
             
             self.config = self.config_manager.get_config()
+            
+            # Reinitialize services in playlist tab manager
+            if self.playlist_tab_manager:
+                self.playlist_tab_manager.reinitialize_services()
+            
             self._update_status("Configuration saved successfully")
             messagebox.showinfo("Success", "Configuration saved successfully!")
             
@@ -511,6 +585,49 @@ class TTSMixmasterApp:
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to connect to Last.fm: {e}")
+    
+    def _test_youtube_connection(self):
+        """Test YouTube API connection"""
+        try:
+            api_key = self.youtube_api_key_entry.get()
+            
+            if not api_key:
+                messagebox.showwarning("Warning", "Please enter YouTube API key")
+                return
+            
+            from ..api.youtube_service import YouTubeService
+            service = YouTubeService(api_key)
+            
+            if service.test_connection():
+                messagebox.showinfo("Success", "YouTube connection successful!")
+                self._update_status("YouTube connection successful")
+            else:
+                messagebox.showerror("Error", "Failed to connect to YouTube API")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to test YouTube connection: {e}")
+    
+    def _test_spotify_connection(self):
+        """Test Spotify API connection"""
+        try:
+            client_id = self.spotify_client_id_entry.get()
+            client_secret = self.spotify_client_secret_entry.get()
+            
+            if not client_id or not client_secret:
+                messagebox.showwarning("Warning", "Please enter Spotify Client ID and Secret")
+                return
+            
+            from ..api.spotify_service import SpotifyService
+            service = SpotifyService(client_id, client_secret)
+            
+            if service.test_connection():
+                messagebox.showinfo("Success", "Spotify connection successful!")
+                self._update_status("Spotify connection successful")
+            else:
+                messagebox.showerror("Error", "Failed to connect to Spotify API")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to test Spotify connection: {e}")
     
     def _test_azure_connection(self):
         """Test Azure Storage connection"""
@@ -621,11 +738,36 @@ class TTSMixmasterApp:
         """Start downloading tracks"""
         def download_worker():
             try:
-                if not self.current_playlists:
-                    messagebox.showwarning("Warning", "No playlists to download")
+                # Get tracks from the new playlist tab manager
+                if self.playlist_tab_manager:
+                    selected_playlist = self.playlist_tab_manager.get_selected_playlist()
+                    if selected_playlist and selected_playlist.tracks:
+                        all_tracks = selected_playlist.tracks
+                        playlist_name = selected_playlist.name
+                    else:
+                        # Fallback to any loaded tracks from playlist tab
+                        all_tracks = self.playlist_tab_manager.get_selected_playlist_tracks()
+                        if not all_tracks:
+                            messagebox.showwarning("Warning", "No playlist selected or playlist has no tracks. Please select a playlist and load its tracks first.")
+                            return
+                        playlist_name = "Selected Playlist"
+                else:
+                    # Fallback to legacy playlists if playlist tab manager is not available
+                    if not self.current_playlists:
+                        messagebox.showwarning("Warning", "No playlists to download")
+                        return
+                    
+                    # Get all tracks from all playlists
+                    all_tracks = []
+                    for playlist in self.current_playlists:
+                        all_tracks.extend(playlist.tracks)
+                    playlist_name = "Legacy Playlists"
+                
+                if not all_tracks:
+                    messagebox.showwarning("Warning", "No tracks found to download")
                     return
                 
-                self._update_status("Starting download...")
+                self._update_status(f"Starting download of {len(all_tracks)} tracks from {playlist_name}...")
                 
                 # Initialize downloader
                 if not self.downloader:
@@ -634,19 +776,12 @@ class TTSMixmasterApp:
                         self.config.audio_quality
                     )
                 
-                # Get all tracks from all playlists
-                all_tracks = []
-                for playlist in self.current_playlists:
-                    all_tracks.extend(playlist.tracks)
-                
                 # Update progress
                 self.download_progress.set(0)
-                total_tracks = len(all_tracks)
-                
-                # Download tracks
+                total_tracks = len(all_tracks)                # Download tracks
                 self.download_results = []
                 for i, track in enumerate(all_tracks):
-                    self._update_status(f"Downloading {i+1}/{total_tracks}: {track}")
+                    self._update_status(f"Downloading {i+1}/{total_tracks}: {track.artist} - {track.title}")
                     
                     result = self.downloader.search_and_download_track(track)
                     self.download_results.append(result)
@@ -802,36 +937,43 @@ Status: {status}        """.strip().format(
         """Generate TTS code"""
         import json
         try:
-            if not self.current_playlists:
-                messagebox.showwarning("Warning", "No playlists to format")
-                return
+            # Get playlist from the new playlist tab manager
+            selected_playlist = None
+            if self.playlist_tab_manager:
+                selected_playlist = self.playlist_tab_manager.get_selected_playlist()
+            
+            if not selected_playlist:
+                # Fallback to legacy playlists
+                if not self.current_playlists:
+                    messagebox.showwarning("Warning", "No playlists to format. Please select a playlist from the Collections & Playlists tab.")
+                    return
+                selected_playlist = self.current_playlists[0]  # Use first legacy playlist as fallback
             
             # Initialize formatter
             if not self.formatter:
                 self.formatter = TTSFormatter(self.config.tts_output_path)
             
-            # Generate code for first playlist
-            playlist = self.current_playlists[0]
-            
             # Create music player with upload results if available, otherwise use local files
             if self.upload_results:
-                music_player = self.formatter.create_music_player(playlist, upload_results=self.upload_results)
+                music_player = self.formatter.create_music_player_from_playlist_info(selected_playlist, upload_results=self.upload_results)
             else:
                 # Use download results or just create player without URLs
                 local_files = []
                 if self.download_results:
                     # Filter out None values and failed downloads
                     local_files = [result.file_path for result in self.download_results 
-                                 if result.success and result.file_path is not None]
-                music_player = self.formatter.create_music_player(playlist, local_files=local_files)
-              # Get customization options
+                                   if result.success and result.file_path is not None]
+                music_player = self.formatter.create_music_player_from_playlist_info(selected_playlist, local_files=local_files)
+            
+            # Get customization options
             nickname = self.tts_nickname_var.get().strip()
             description = self.tts_description_var.get().strip()
             image_url = self.tts_image_url_var.get().strip()
             image_secondary_url = self.tts_image_secondary_url_var.get().strip()
             use_simple_format = self.use_simple_format_var.get()
             output_format = self.output_format_var.get()
-              # Generate appropriate code based on format
+            
+            # Generate appropriate code based on format
             if output_format == "lua":
                 if use_simple_format:
                     code = self.formatter.generate_simple_playlist_lua(music_player)
@@ -942,7 +1084,6 @@ Status: {status}        """.strip().format(
                 failed += 1
                 self.upload_results_text.insert(tk.END, f"✗ {os.path.basename(result.file_path)}\n")
                 self.upload_results_text.insert(tk.END, f"  Error: {result.error_message}\n\n")
-        
         self.upload_results_text.insert(tk.END, f"\nSummary: {successful} successful, {failed} failed")
     
     def run(self):

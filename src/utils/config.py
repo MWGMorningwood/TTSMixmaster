@@ -18,10 +18,21 @@ import configparser
 @dataclass
 class AppConfig:
     """Application configuration settings"""
-    # API Settings
+    # LastFM API Settings
     lastfm_api_key: str = ""
     lastfm_api_secret: str = ""
     lastfm_username: str = ""
+    
+    # YouTube API Settings
+    youtube_api_key: str = ""
+    youtube_channel_id: str = ""
+    
+    # Spotify API Settings
+    spotify_client_id: str = ""
+    spotify_client_secret: str = ""
+    spotify_user_id: str = ""
+    
+    # Legacy Steam API Settings (for backwards compatibility)
     steam_api_key: str = ""
     steam_username: str = ""
     
@@ -67,8 +78,7 @@ class ConfigManager:
         
         # Load environment variables
         load_dotenv()
-        
-        # Load configuration
+          # Load configuration
         self.load_config()
     
     def load_config(self):
@@ -81,7 +91,8 @@ class ConfigManager:
                     self.config = AppConfig.from_dict(data)
             except Exception as e:
                 logging.warning(f"Failed to load config file: {e}")
-          # Override with environment variables
+        
+        # Override with environment variables
         self._load_from_env()
     
     def _load_from_env(self):
@@ -90,6 +101,11 @@ class ConfigManager:
             'LASTFM_API_KEY': 'lastfm_api_key',
             'LASTFM_API_SECRET': 'lastfm_api_secret',
             'LASTFM_USERNAME': 'lastfm_username',
+            'YOUTUBE_API_KEY': 'youtube_api_key',
+            'YOUTUBE_CHANNEL_ID': 'youtube_channel_id',
+            'SPOTIFY_CLIENT_ID': 'spotify_client_id',
+            'SPOTIFY_CLIENT_SECRET': 'spotify_client_secret',
+            'SPOTIFY_USER_ID': 'spotify_user_id',
             'STEAM_API_KEY': 'steam_api_key',
             'STEAM_USERNAME': 'steam_username',
             'AZURE_STORAGE_CONNECTION_STRING': 'azure_storage_connection_string',
