@@ -78,7 +78,7 @@ jobs:
     
     - name: Build with PyInstaller
       run: |
-        pyinstaller main.py --clean --noconfirm
+        pyinstaller main.py --name 'TTSMixmaster' --clean --noconfirm
         if (-not (Test-Path "dist\TTSMixmaster\TTSMixmaster.exe")) {
           throw "Build failed - executable not found"
         }
