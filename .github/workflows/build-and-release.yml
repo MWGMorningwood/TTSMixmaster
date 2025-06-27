@@ -128,11 +128,25 @@ jobs:
       run: |
         $version = "${{ steps.get_version.outputs.version }}"
         
-        # Create WiX file content as separate lines to avoid YAML issues
+        # Convert version to 4-part format required by WiX v4
+        $versionParts = $version.Split('.')
+        if ($versionParts.Length -eq 3) {
+          $wixVersion = "$version.0"
+        } elseif ($versionParts.Length -eq 2) {
+          $wixVersion = "$version.0.0"
+        } elseif ($versionParts.Length -eq 1) {
+          $wixVersion = "$version.0.0.0"
+        } else {
+          $wixVersion = $version
+        }
+        
+        echo "Converting version '$version' to WiX format: '$wixVersion'"
+        
+        # Create WiX file content using WiX v4 syntax
         $lines = @(
           '<?xml version="1.0" encoding="UTF-8"?>',
           '<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">',
-          '  <Package Name="TTSMixmaster" Language="1033" Version="' + $version + '" Manufacturer="TTSMixmaster" UpgradeCode="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">',
+          '  <Package Name="TTSMixmaster" Language="1033" Version="' + $wixVersion + '" Manufacturer="TTSMixmaster" UpgradeCode="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">',
           '    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />',
           '    <MediaTemplate EmbedCab="yes" />',
           '    <Feature Id="ProductFeature" Title="TTSMixmaster" Level="1">',
@@ -140,22 +154,19 @@ jobs:
           '    </Feature>',
           '  </Package>',
           '  <Fragment>',
-          '    <Directory Id="TARGETDIR" Name="SourceDir">',
-          '      <Directory Id="ProgramFilesFolder">',
-          '        <Directory Id="INSTALLFOLDER" Name="TTSMixmaster" />',
-          '      </Directory>',
-          '      <Directory Id="ProgramMenuFolder">',
-          '        <Directory Id="ApplicationProgramsFolder" Name="TTSMixmaster"/>',
-          '      </Directory>',
-          '      <Directory Id="DesktopFolder" />',
-          '    </Directory>',
+          '    <StandardDirectory Id="ProgramFilesFolder">',
+          '      <Directory Id="INSTALLFOLDER" Name="TTSMixmaster" />',
+          '    </StandardDirectory>',
+          '    <StandardDirectory Id="ProgramMenuFolder">',
+          '      <Directory Id="ApplicationProgramsFolder" Name="TTSMixmaster"/>',
+          '    </StandardDirectory>',
           '  </Fragment>',
           '  <Fragment>',
           '    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">',
           '      <Component Id="MainExecutable" Guid="*">',
           '        <File Id="TTSMixmasterExe" Source="dist\TTSMixmaster\TTSMixmaster.exe" KeyPath="yes" />',
           '        <Shortcut Id="StartMenuShortcut" Name="TTSMixmaster" Target="[INSTALLFOLDER]TTSMixmaster.exe" Directory="ApplicationProgramsFolder"/>',
-          '        <Shortcut Id="DesktopShortcut" Name="TTSMixmaster" Target="[INSTALLFOLDER]TTSMixmaster.exe" Directory="DesktopFolder"/>',
+          '        <Shortcut Id="DesktopShortcut" Name="TTSMixmaster" Target="[DesktopFolder]TTSMixmaster.exe" />',
           '        <RemoveFolder Id="RemoveProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall"/>',
           '        <RegistryValue Root="HKCU" Key="Software\TTSMixmaster" Name="Installed" Type="string" Value="yes" KeyPath="no"/>',
           '      </Component>',
@@ -163,15 +174,21 @@ jobs:
           '  </Fragment>',
           '</Wix>'
         )
+        )
         
         try {
           $lines | Out-File -FilePath "TTSMixmaster.wxs" -Encoding UTF8
-          echo "WiX source file created successfully"
+          echo "WiX source file created successfully with version: $wixVersion"
           
           # Verify the file was created and show first few lines
           if (Test-Path "TTSMixmaster.wxs") {
             $fileSize = (Get-Item "TTSMixmaster.wxs").Length
             echo "WiX file size: $fileSize bytes"
+            
+            # Show the version line for debugging
+            $content = Get-Content "TTSMixmaster.wxs"
+            $versionLine = $content | Where-Object { $_ -match "Version=" }
+            echo "Version line in WiX file: $versionLine"
           } else {
             throw "WiX source file creation failed"
           }
@@ -185,12 +202,21 @@ jobs:
       run: |
         $version = "${{ steps.get_version.outputs.version }}"
         
+        # Show the WiX file content for debugging
+        echo "=== WiX Source File Content ==="
+        Get-Content "TTSMixmaster.wxs" | Select-Object -First 10
+        echo "=============================="
+        
         # Build the MSI with error handling
         try {
-          wix build TTSMixmaster.wxs -out "dist\TTSMixmaster-v$version-Setup.msi" -arch x64
+          echo "Building MSI with WiX..."
+          wix build TTSMixmaster.wxs -out "dist\TTSMixmaster-v$version-Setup.msi" -arch x64 -v
         } catch {
           echo "WiX build failed with error: $_"
-          throw "MSI creation failed"
+          echo "=== Full WiX File Content ==="
+          Get-Content "TTSMixmaster.wxs"
+          echo "=============================="
+          throw "MSI creation failed: $_"
         }
         
         # Verify MSI was created
@@ -201,6 +227,8 @@ jobs:
           echo "msi_path=dist\TTSMixmaster-v$version-Setup.msi" >> $env:GITHUB_OUTPUT
           echo "msi_name=TTSMixmaster-v$version-Setup.msi" >> $env:GITHUB_OUTPUT
         } else {
+          echo "MSI file not found. Listing dist directory contents:"
+          Get-ChildItem "dist" -Recurse
           throw "MSI creation failed - file not found"
         }
       shell: pwsh
