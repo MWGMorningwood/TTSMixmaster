@@ -97,14 +97,6 @@ jobs:
         }
       shell: pwsh
     
-    - name: Set up Inno Setup
-      run: |
-        $url = "https://files.jrsoftware.org/is/6/innosetup-6.2.2.exe"
-        $output = "innosetup.exe"
-        Invoke-WebRequest -Uri $url -OutFile $output
-        Start-Process -FilePath $output -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
-      shell: pwsh
-    
     - name: Create MSI installer
       run: |
         $innoPath = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
