@@ -48,7 +48,7 @@ jobs:
       shell: pwsh
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ env.PYTHON_VERSION }}
         cache: 'pip'
@@ -97,26 +97,6 @@ jobs:
         }
       shell: pwsh
     
-    - name: Create MSI installer
-      run: |
-        $innoPath = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-        if (-not (Test-Path $innoPath)) {
-          throw "Inno Setup not found at $innoPath"
-        }
-        & $innoPath "installer\TTSMixmaster.iss"
-        
-        # Find the created installer
-        $installerPattern = "dist\TTSMixmaster-Setup-*.exe"
-        $installer = Get-ChildItem $installerPattern | Select-Object -First 1
-        if ($installer) {
-          echo "Installer created: $($installer.Name)"
-          echo "installer_path=$($installer.FullName)" >> $env:GITHUB_OUTPUT
-        } else {
-          throw "Installer not created"
-        }
-      shell: pwsh
-      id: create_installer
-    
     - name: Sign executable with Azure Trusted Signing
       uses: azure/trusted-signing-action@v0.4.0
       with:
@@ -134,7 +114,99 @@ jobs:
         timestamp-rfc3161: http://timestamp.acs.microsoft.com
         timestamp-digest: SHA256
     
-    - name: Sign installer with Azure Trusted Signing
+    - name: Install WiX Toolset
+      run: |
+        # Install WiX Toolset v4 as a .NET global tool
+        dotnet tool install --global wix --version 4.0.5
+        
+        # Verify installation and show version
+        wix --version
+        echo "WiX Toolset installed successfully"
+      shell: pwsh
+    
+    - name: Create WiX source file
+      run: |
+        $version = "${{ steps.get_version.outputs.version }}"
+        
+        # Create WiX file content as separate lines to avoid YAML issues
+        $lines = @(
+          '<?xml version="1.0" encoding="UTF-8"?>',
+          '<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">',
+          '  <Package Name="TTSMixmaster" Language="1033" Version="' + $version + '" Manufacturer="TTSMixmaster" UpgradeCode="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">',
+          '    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />',
+          '    <MediaTemplate EmbedCab="yes" />',
+          '    <Feature Id="ProductFeature" Title="TTSMixmaster" Level="1">',
+          '      <ComponentGroupRef Id="ProductComponents" />',
+          '    </Feature>',
+          '  </Package>',
+          '  <Fragment>',
+          '    <Directory Id="TARGETDIR" Name="SourceDir">',
+          '      <Directory Id="ProgramFilesFolder">',
+          '        <Directory Id="INSTALLFOLDER" Name="TTSMixmaster" />',
+          '      </Directory>',
+          '      <Directory Id="ProgramMenuFolder">',
+          '        <Directory Id="ApplicationProgramsFolder" Name="TTSMixmaster"/>',
+          '      </Directory>',
+          '      <Directory Id="DesktopFolder" />',
+          '    </Directory>',
+          '  </Fragment>',
+          '  <Fragment>',
+          '    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">',
+          '      <Component Id="MainExecutable" Guid="*">',
+          '        <File Id="TTSMixmasterExe" Source="dist\TTSMixmaster\TTSMixmaster.exe" KeyPath="yes" />',
+          '        <Shortcut Id="StartMenuShortcut" Name="TTSMixmaster" Target="[INSTALLFOLDER]TTSMixmaster.exe" Directory="ApplicationProgramsFolder"/>',
+          '        <Shortcut Id="DesktopShortcut" Name="TTSMixmaster" Target="[INSTALLFOLDER]TTSMixmaster.exe" Directory="DesktopFolder"/>',
+          '        <RemoveFolder Id="RemoveProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall"/>',
+          '        <RegistryValue Root="HKCU" Key="Software\TTSMixmaster" Name="Installed" Type="string" Value="yes" KeyPath="no"/>',
+          '      </Component>',
+          '    </ComponentGroup>',
+          '  </Fragment>',
+          '</Wix>'
+        )
+        
+        try {
+          $lines | Out-File -FilePath "TTSMixmaster.wxs" -Encoding UTF8
+          echo "WiX source file created successfully"
+          
+          # Verify the file was created and show first few lines
+          if (Test-Path "TTSMixmaster.wxs") {
+            $fileSize = (Get-Item "TTSMixmaster.wxs").Length
+            echo "WiX file size: $fileSize bytes"
+          } else {
+            throw "WiX source file creation failed"
+          }
+        } catch {
+          echo "Error creating WiX source file: $_"
+          throw "WiX source file creation failed"
+        }
+      shell: pwsh
+    
+    - name: Build MSI with WiX
+      run: |
+        $version = "${{ steps.get_version.outputs.version }}"
+        
+        # Build the MSI with error handling
+        try {
+          wix build TTSMixmaster.wxs -out "dist\TTSMixmaster-v$version-Setup.msi" -arch x64
+        } catch {
+          echo "WiX build failed with error: $_"
+          throw "MSI creation failed"
+        }
+        
+        # Verify MSI was created
+        if (Test-Path "dist\TTSMixmaster-v$version-Setup.msi") {
+          $msiInfo = Get-Item "dist\TTSMixmaster-v$version-Setup.msi"
+          echo "MSI created successfully: $($msiInfo.Name)"
+          echo "MSI size: $($msiInfo.Length) bytes"
+          echo "msi_path=dist\TTSMixmaster-v$version-Setup.msi" >> $env:GITHUB_OUTPUT
+          echo "msi_name=TTSMixmaster-v$version-Setup.msi" >> $env:GITHUB_OUTPUT
+        } else {
+          throw "MSI creation failed - file not found"
+        }
+      shell: pwsh
+      id: create_msi
+    
+    - name: Sign MSI with Azure Trusted Signing
       uses: azure/trusted-signing-action@v0.4.0
       with:
         azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -144,7 +216,7 @@ jobs:
         trusted-signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
         certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
         files-folder: dist
-        files-folder-filter: exe
+        files-folder-filter: msi
         files-folder-recurse: false
         files-folder-depth: 1
         file-digest: SHA256
@@ -164,14 +236,14 @@ jobs:
     - name: Set artifacts output
       id: artifacts
       run: |
-        $installer = Get-ChildItem "dist\TTSMixmaster-Setup-*.exe" | Select-Object -First 1
         $zip = "${{ steps.create_zip.outputs.zip_path }}"
+        $msi = "${{ steps.create_msi.outputs.msi_path }}"
         
         $artifacts = @{
-          installer_path = $installer.FullName
-          installer_name = $installer.Name
           zip_path = $zip
           zip_name = "${{ steps.create_zip.outputs.zip_name }}"
+          msi_path = $msi
+          msi_name = "${{ steps.create_msi.outputs.msi_name }}"
         } | ConvertTo-Json -Compress
         
         echo "artifacts=$artifacts" >> $env:GITHUB_OUTPUT
@@ -182,7 +254,7 @@ jobs:
       with:
         name: TTSMixmaster-Build-v${{ steps.get_version.outputs.version }}
         path: |
-          dist/TTSMixmaster-Setup-*.exe
+          dist/TTSMixmaster-v*-Setup.msi
           dist/TTSMixmaster-v*-Portable.zip
           dist/TTSMixmaster/
         retention-days: 30
@@ -245,16 +317,16 @@ jobs:
         
         ## Downloads
         
-        - **TTSMixmaster-Setup-v${{ needs.build.outputs.version }}.exe** - Windows installer (recommended)
+        - **TTSMixmaster-v${{ needs.build.outputs.version }}-Setup.msi** - Windows installer (recommended)
         - **TTSMixmaster-v${{ needs.build.outputs.version }}-Portable.zip** - Portable version
         
         ## Installation
         
-        ### Windows Installer
-        1. Download the \`.exe\` installer
-        2. Run as administrator if prompted
+        ### Windows Installer (MSI)
+        1. Download the \`.msi\` installer
+        2. Run the installer
         3. Follow the installation wizard
-        4. Launch TTSMixmaster from the Start Menu
+        4. Launch TTSMixmaster from the Start Menu or Desktop shortcut
         
         ### Portable Version
         1. Download the \`.zip\` file
@@ -269,7 +341,8 @@ jobs:
         
         ## Notes
         
-        - Both executables are digitally signed with Azure Trusted Signing
+        - Both the MSI installer and portable executable are digitally signed with Azure Trusted Signing
+        - The MSI installer creates Start Menu and Desktop shortcuts automatically
         - First-time users should check the [documentation](https://github.com/${{ github.repository }}/tree/main/docs) for setup instructions
         - Report issues on the [GitHub Issues](https://github.com/${{ github.repository }}/issues) page"
         
@@ -288,8 +361,9 @@ jobs:
         draft: false
         prerelease: false
         files: |
-          ./artifacts/TTSMixmaster-Setup-*.exe
-          ./artifacts/TTSMixmaster-v*-Portable.zip      env:
+          ./artifacts/TTSMixmaster-v*-Setup.msi
+          ./artifacts/TTSMixmaster-v*-Portable.zip
+      env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Update latest release info
