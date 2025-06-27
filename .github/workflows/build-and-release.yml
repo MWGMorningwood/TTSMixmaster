@@ -20,6 +20,10 @@ env:
   PYTHON_VERSION: "3.11"
   PROJECT_NAME: "TTSMixmaster"
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -254,6 +258,20 @@ jobs:
         name: TTSMixmaster-Build-v${{ needs.build.outputs.version }}
         path: ./artifacts
     
+    - name: Verify artifacts and permissions
+      run: |
+        echo "=== Verifying downloaded artifacts ==="
+        ls -la ./artifacts/
+        echo ""
+        echo "=== Checking for MSI and ZIP files ==="
+        find ./artifacts -name "*.msi" -o -name "*.zip"
+        echo ""
+        echo "=== GitHub Token Info ==="
+        echo "Actor: ${{ github.actor }}"
+        echo "Repository: ${{ github.repository }}"
+        echo "Event: ${{ github.event_name }}"
+        echo "Ref: ${{ github.ref }}"
+    
     - name: Generate changelog
       id: changelog
       run: |
@@ -331,7 +349,7 @@ jobs:
         echo "EOF" >> $GITHUB_OUTPUT
     
     - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         tag_name: v${{ needs.build.outputs.version }}
         name: TTSMixmaster v${{ needs.build.outputs.version }}
@@ -341,8 +359,8 @@ jobs:
         files: |
           ./artifacts/TTSMixmaster-v*-Setup.msi
           ./artifacts/TTSMixmaster-v*-Portable.zip
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fail_on_unmatched_files: true
     
     - name: Update latest release info
       run: |
