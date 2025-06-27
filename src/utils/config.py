@@ -6,6 +6,7 @@ for the TTSMixmaster application.
 """
 
 import os
+import sys
 import json
 import logging
 from pathlib import Path
@@ -13,6 +14,100 @@ from typing import Dict, Any, Optional
 from dataclasses import dataclass, asdict
 from dotenv import load_dotenv
 import configparser
+
+
+def get_resource_path(resource_name: str) -> Optional[Path]:
+    """
+    Get path to an embedded resource file.
+    
+    Args:
+        resource_name: Name of the resource file
+        
+    Returns:
+        Path to the resource file or None if not found
+    """
+    # Check if we're running from a PyInstaller bundle
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # Running from PyInstaller bundle
+        try:
+            bundle_dir = Path(sys._MEIPASS)
+            resource_path = bundle_dir / 'resources' / resource_name
+            if resource_path.exists():
+                return resource_path
+        except:
+            pass
+    
+    # Running from source - look for the file in the project root
+    try:
+        project_root = Path(__file__).parent.parent.parent
+        resource_path = project_root / resource_name
+        if resource_path.exists():
+            return resource_path
+    except:
+        pass
+    
+    return None
+
+
+def create_default_env_file():
+    """
+    Create a default .env file if it doesn't exist, using embedded template.
+    """
+    env_file = Path('.env')
+    if env_file.exists():
+        return  # Don't overwrite existing .env file
+    
+    # Try to get the embedded .env.template
+    template_path = get_resource_path('.env.template')
+    if template_path:
+        try:
+            with open(template_path, 'r') as template_file:
+                template_content = template_file.read()
+            with open(env_file, 'w') as env_file_handle:
+                env_file_handle.write(template_content)
+            logging.info(f"Created default .env file from embedded template")
+        except Exception as e:
+            logging.warning(f"Failed to create .env file from template: {e}")
+    else:
+        # Fallback: create a basic .env template
+        basic_template = """# TTSMixmaster Environment Configuration
+# Fill in your actual credentials
+
+# Last.fm API Configuration
+LASTFM_API_KEY=your_lastfm_api_key_here
+LASTFM_API_SECRET=your_lastfm_api_secret_here
+LASTFM_USERNAME=your_lastfm_username
+
+# YouTube Data API v3 Configuration
+YOUTUBE_API_KEY=your_youtube_api_key_here
+
+# Spotify Web API Configuration  
+SPOTIFY_CLIENT_ID=your_spotify_client_id_here
+SPOTIFY_CLIENT_SECRET=your_spotify_client_secret_here
+
+# Azure Storage Configuration (for audio file uploads)
+AZURE_STORAGE_CONNECTION_STRING=your_azure_storage_connection_string_here
+AZURE_CONTAINER_NAME=tts-audio
+
+# Download Settings
+DOWNLOAD_PATH=./downloads
+UPLOAD_PATH=./uploads
+TTS_OUTPUT_PATH=./tts_formatted
+
+# Audio Settings
+AUDIO_QUALITY=192
+AUDIO_FORMAT=mp3
+
+# UI Settings
+THEME=dark
+WINDOW_SIZE=1200x800
+"""
+        try:
+            with open(env_file, 'w') as env_file_handle:
+                env_file_handle.write(basic_template)
+            logging.info(f"Created basic .env file")
+        except Exception as e:
+            logging.warning(f"Failed to create basic .env file: {e}")
 
 
 @dataclass
@@ -75,6 +170,12 @@ class ConfigManager:
         """
         self.config_file = Path(config_file)
         self.config = AppConfig()
+        
+        # Create default .env file if needed (for portable version)
+        try:
+            create_default_env_file()
+        except Exception as e:
+            logging.warning(f"Failed to create default .env file: {e}")
         
         # Load environment variables
         load_dotenv()

@@ -82,22 +82,43 @@ jobs:
     
     - name: Build with PyInstaller
       run: |
-        pyinstaller main.py --name 'TTSMixmaster' --clean --noconfirm
-        if (-not (Test-Path "dist\TTSMixmaster\TTSMixmaster.exe")) {
-          throw "Build failed - executable not found"
+        # Build single-file portable executable
+        pyinstaller TTSMixmaster-onefile.spec --clean --noconfirm
+        
+        # Verify single executable was created
+        if (-not (Test-Path "dist\TTSMixmaster.exe")) {
+          throw "Single-file build failed - executable not found"
         }
-        echo "Build completed successfully"
+        
+        # Also build directory version for installer
+        pyinstaller main.py --name 'TTSMixmaster-installer' --clean --noconfirm --distpath dist_installer
+        if (-not (Test-Path "dist_installer\TTSMixmaster-installer\TTSMixmaster-installer.exe")) {
+          throw "Installer build failed - executable not found"
+        }
+        
+        echo "Both builds completed successfully"
       shell: pwsh
     
     - name: Verify build
       run: |
-        $exePath = "dist\TTSMixmaster\TTSMixmaster.exe"
-        if (Test-Path $exePath) {
-          $fileInfo = Get-Item $exePath
-          echo "Executable size: $($fileInfo.Length) bytes"
-          echo "Executable created: $($fileInfo.CreationTime)"
+        # Check single-file executable
+        $singleExe = "dist\TTSMixmaster.exe"
+        if (Test-Path $singleExe) {
+          $fileInfo = Get-Item $singleExe
+          echo "Single-file executable size: $($fileInfo.Length) bytes"
+          echo "Single-file executable created: $($fileInfo.CreationTime)"
         } else {
-          throw "Executable not found at $exePath"
+          throw "Single-file executable not found at $singleExe"
+        }
+        
+        # Check installer executable
+        $installerExe = "dist_installer\TTSMixmaster-installer\TTSMixmaster-installer.exe"
+        if (Test-Path $installerExe) {
+          $fileInfo = Get-Item $installerExe
+          echo "Installer executable size: $($fileInfo.Length) bytes"
+          echo "Installer executable created: $($fileInfo.CreationTime)"
+        } else {
+          throw "Installer executable not found at $installerExe"
         }
       shell: pwsh
     
@@ -110,7 +131,24 @@ jobs:
         endpoint: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
         trusted-signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
         certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
-        files-folder: dist\TTSMixmaster
+        files-folder: dist
+        files-folder-filter: exe
+        files-folder-recurse: false
+        files-folder-depth: 1
+        file-digest: SHA256
+        timestamp-rfc3161: http://timestamp.acs.microsoft.com
+        timestamp-digest: SHA256
+    
+    - name: Sign installer executable with Azure Trusted Signing
+      uses: azure/trusted-signing-action@v0.4.0
+      with:
+        azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+        endpoint: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+        trusted-signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+        certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
+        files-folder: dist_installer\TTSMixmaster-installer
         files-folder-filter: exe
         files-folder-recurse: false
         files-folder-depth: 1
@@ -209,9 +247,29 @@ jobs:
       run: |
         $version = "${{ steps.get_version.outputs.version }}"
         $zipName = "TTSMixmaster-v$version-Portable.zip"
-        Compress-Archive -Path "dist\TTSMixmaster\*" -DestinationPath "dist\$zipName"
+        
+        # Create a temporary directory for the portable version
+        $portableDir = "portable_temp"
+        New-Item -ItemType Directory -Path $portableDir -Force
+        
+        # Copy only the single executable
+        Copy-Item "dist\TTSMixmaster.exe" "$portableDir\TTSMixmaster.exe"
+        
+        # Create the ZIP with just the single executable
+        Compress-Archive -Path "$portableDir\*" -DestinationPath "dist\$zipName"
+        
+        # Clean up temp directory
+        Remove-Item -Recurse -Force $portableDir
+        
         echo "zip_path=dist\$zipName" >> $env:GITHUB_OUTPUT
         echo "zip_name=$zipName" >> $env:GITHUB_OUTPUT
+        
+        # Verify the ZIP contents
+        echo "ZIP file contents:"
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $zip = [System.IO.Compression.ZipFile]::OpenRead("dist\$zipName")
+        $zip.Entries | ForEach-Object { echo "  - $($_.Name) ($($_.Length) bytes)" }
+        $zip.Dispose()
       shell: pwsh
       id: create_zip
     
@@ -238,7 +296,8 @@ jobs:
         path: |
           dist/TTSMixmaster-v*-Setup.msi
           dist/TTSMixmaster-v*-Portable.zip
-          dist/TTSMixmaster/
+          dist/TTSMixmaster.exe
+          dist_installer/TTSMixmaster-installer/
         retention-days: 30
 
   release:
