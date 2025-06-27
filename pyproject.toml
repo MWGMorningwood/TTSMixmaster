@@ -9,7 +9,7 @@ description = "A comprehensive tool for managing Last.fm playlists and integrati
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [
-    {name = "Logan", email = "your-email@example.com"}
+    {name = "Logan", email = "logan@mw-gc.com"}
 ]
 keywords = ["lastfm", "tabletop-simulator", "music", "playlist", "steam-workshop"]
 classifiers = [
@@ -58,9 +58,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/TTSMixmaster"
-Repository = "https://github.com/yourusername/TTSMixmaster"
-Issues = "https://github.com/yourusername/TTSMixmaster/issues"
+Homepage = "https://github.com/MWGMorningwood/TTSMixmaster"
+Repository = "https://github.com/MWGMorningwood/TTSMixmaster"
+Issues = "https://github.com/MWGMorningwood/TTSMixmaster/issues"
 
 [project.scripts]
 ttsmixmaster = "main:main"

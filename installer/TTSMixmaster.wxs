@@ -3,7 +3,7 @@
   <Package Name="TTSMixmaster" 
            Language="1033" 
            Version="1.0.0.0" 
-           Manufacturer="TTSMixmaster Team" 
+           Manufacturer="Morningwood Gaming LLC" 
            UpgradeCode="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">
     
     <MajorUpgrade DowngradeErrorMessage="A newer version of TTSMixmaster is already installed." />
@@ -61,10 +61,11 @@
                       On="uninstall"/>
       </Component>
       
-      <!-- Add additional files if needed -->
-      <Component Id="ConfigFiles" Guid="*">
-        <!-- Add config files, documentation, etc. here if needed -->
+      <!-- Additional component for future use - commented out until needed
+      <Component Id="ConfigFiles" Guid="12345678-1234-1234-1234-123456789012">
+        <File Id="ConfigFile" Source="config.json" KeyPath="yes" />
       </Component>
+      -->
     </ComponentGroup>
   </Fragment>
 </Wix>
