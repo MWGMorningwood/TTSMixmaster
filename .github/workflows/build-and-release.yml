@@ -82,22 +82,63 @@ jobs:
     
     - name: Build with PyInstaller
       run: |
-        pyinstaller main.py --name 'TTSMixmaster' --clean --noconfirm
+        # Build using the spec file for better dependency handling
+        pyinstaller TTSMixmaster.spec --clean --noconfirm
         if (-not (Test-Path "dist\TTSMixmaster\TTSMixmaster.exe")) {
           throw "Build failed - executable not found"
         }
+        
+        # Verify that the _internal directory exists and has content
+        if (-not (Test-Path "dist\TTSMixmaster\_internal")) {
+          throw "Build failed - _internal directory missing"
+        }
+        
+        $internalFiles = Get-ChildItem "dist\TTSMixmaster\_internal" -File | Measure-Object
+        if ($internalFiles.Count -eq 0) {
+          throw "Build failed - _internal directory is empty"
+        }
+        
         echo "Build completed successfully"
+        echo "_internal directory contains $($internalFiles.Count) files"
       shell: pwsh
     
     - name: Verify build
       run: |
         $exePath = "dist\TTSMixmaster\TTSMixmaster.exe"
+        $internalPath = "dist\TTSMixmaster\_internal"
+        
         if (Test-Path $exePath) {
           $fileInfo = Get-Item $exePath
-          echo "Executable size: $($fileInfo.Length) bytes"
-          echo "Executable created: $($fileInfo.CreationTime)"
+          echo "✅ Executable found: $($fileInfo.Length) bytes"
+          echo "✅ Executable created: $($fileInfo.CreationTime)"
         } else {
-          throw "Executable not found at $exePath"
+          throw "❌ Executable not found at $exePath"
+        }
+        
+        if (Test-Path $internalPath) {
+          $internalFiles = Get-ChildItem $internalPath -Recurse -File
+          echo "✅ _internal directory found with $($internalFiles.Count) files"
+          echo "✅ _internal directory size: $(($internalFiles | Measure-Object -Property Length -Sum).Sum) bytes"
+          
+          # List some key files that should be present
+          $keyFiles = @("base_library.zip", "python*.dll", "*.pyd")
+          foreach ($pattern in $keyFiles) {
+            $found = Get-ChildItem $internalPath -Recurse -File -Name $pattern
+            if ($found) {
+              echo "✅ Found critical files matching $pattern"
+            }
+          }
+        } else {
+          throw "❌ _internal directory not found at $internalPath"
+        }
+        
+        # Verify total build size is reasonable (should be > 50MB for a full Python app)
+        $totalSize = (Get-ChildItem "dist\TTSMixmaster" -Recurse -File | Measure-Object -Property Length -Sum).Sum
+        $totalSizeMB = [math]::Round($totalSize / 1MB, 2)
+        echo "✅ Total build size: $totalSizeMB MB"
+        
+        if ($totalSizeMB -lt 30) {
+          Write-Warning "⚠️  Build size seems small ($totalSizeMB MB), may be missing dependencies"
         }
       shell: pwsh
     
@@ -165,13 +206,50 @@ jobs:
       run: |
         $version = "${{ steps.get_version.outputs.version }}"
         
+        # Convert version to 4-part format required by WiX v4
+        $versionParts = $version.Split('.')
+        if ($versionParts.Length -eq 3) {
+          $wixVersion = "$version.0"
+        } elseif ($versionParts.Length -eq 2) {
+          $wixVersion = "$version.0.0"
+        } elseif ($versionParts.Length -eq 1) {
+          $wixVersion = "$version.0.0.0"
+        } else {
+          $wixVersion = $version
+        }
+        
         echo "Building MSI with WiX..."
-        echo "=== WiX Source File (first 10 lines) ==="
-        Get-Content "TTSMixmaster.wxs" | Select-Object -First 10
+        echo "=== Using heat tool to harvest dist directory ==="
+        
+        # Use heat to harvest all files from the PyInstaller dist directory
+        wix extension add WixToolset.Heat.wixext
+        wix heat dir "dist\TTSMixmaster" -out "HarvestedFiles.wxs" -ag -cg HarvestedFiles -dr INSTALLFOLDER -srd -sfrag -var "var.SourceDir"
+        
+        echo "=== Generated heat file (first 20 lines) ==="
+        Get-Content "HarvestedFiles.wxs" | Select-Object -First 20
         echo "=============================="
         
-        # Build the MSI
-        wix build TTSMixmaster.wxs -out "dist\TTSMixmaster-v$version-Setup.msi" -arch x64 -v
+        # Copy and update the main WiX file
+        Copy-Item "installer\TTSMixmaster.wxs" "TTSMixmaster.wxs"
+        
+        # Replace the version in the WiX file
+        $content = Get-Content "TTSMixmaster.wxs" -Raw
+        $content = $content -replace 'Version="1\.0\.0\.0"', "Version=`"$wixVersion`""
+        
+        # Add reference to harvested files
+        $content = $content -replace '</Package>', @"
+    <Feature Id="HarvestedFiles" Title="Application Files" Level="1">
+      <ComponentGroupRef Id="HarvestedFiles" />
+    </Feature>
+  </Package>
+"@
+        
+        Set-Content "TTSMixmaster.wxs" -Value $content -Encoding UTF8
+        
+        echo "WiX source file prepared with version: $wixVersion"
+        
+        # Build the MSI with both the main file and harvested files
+        wix build TTSMixmaster.wxs HarvestedFiles.wxs -out "dist\TTSMixmaster-v$version-Setup.msi" -arch x64 -v -dSourceDir="dist\TTSMixmaster"
         
         # Verify MSI was created
         if (Test-Path "dist\TTSMixmaster-v$version-Setup.msi") {

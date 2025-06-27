@@ -26,6 +26,7 @@
 
   <Fragment>
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <!-- Main executable with shortcuts -->
       <Component Id="MainExecutable" Guid="*">
         <File Id="TTSMixmasterExe" 
               Source="dist\TTSMixmaster\TTSMixmaster.exe" 
@@ -61,11 +62,15 @@
                       On="uninstall"/>
       </Component>
       
-      <!-- Additional component for future use - commented out until needed
+      <!-- Configuration files -->
       <Component Id="ConfigFiles" Guid="12345678-1234-1234-1234-123456789012">
         <File Id="ConfigFile" Source="config.json" KeyPath="yes" />
+        <File Id="ReadmeFile" Source="README.md" />
+        <File Id="LicenseFile" Source="LICENSE" />
       </Component>
-      -->
+      
+      <!-- This will be replaced by heat-generated file list -->
+      <!-- Heat will be used to auto-generate components for all files in dist\TTSMixmaster -->
     </ComponentGroup>
   </Fragment>
 </Wix>
