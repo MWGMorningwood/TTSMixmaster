@@ -1,6 +1,25 @@
 # Installation Guide
 
-## Prerequisites
+## MSI Installer (Recommended)
+
+**Download the latest MSI installer from the [Releases page](https://github.com/MWGMorningwood/TTSMixmaster/releases).**
+
+1. Download `TTSMixmaster-v{version}-Setup.msi`
+2. Run the installer as Administrator if prompted
+3. Follow the installation wizard
+4. Launch TTSMixmaster from the Start Menu or Desktop shortcut
+
+> **Note**: The MSI installer includes all necessary dependencies and creates proper Start Menu entries. If you experience issues with the installer, please report them in the [Issues section](https://github.com/MWGMorningwood/TTSMixmaster/issues).
+
+## Portable Version
+
+1. Download `TTSMixmaster-v{version}-Portable.zip` from the [Releases page](https://github.com/MWGMorningwood/TTSMixmaster/releases)
+2. Extract to a folder of your choice
+3. Run `TTSMixmaster.exe`
+
+## Development Installation
+
+### Prerequisites
 - Python 3.8 or higher
 - Git (for cloning the repository)
 
