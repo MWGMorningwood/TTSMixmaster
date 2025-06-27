@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="TTSMixmaster" 
+           Language="1033" 
+           Version="1.0.0.0" 
+           Manufacturer="TTSMixmaster Team" 
+           UpgradeCode="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">
+    
+    <MajorUpgrade DowngradeErrorMessage="A newer version of TTSMixmaster is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    
+    <Feature Id="ProductFeature" Title="TTSMixmaster" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <StandardDirectory Id="ProgramFilesFolder">
+      <Directory Id="INSTALLFOLDER" Name="TTSMixmaster" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="TTSMixmaster"/>
+    </StandardDirectory>
+    <StandardDirectory Id="DesktopFolder" />
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Component Id="MainExecutable" Guid="*">
+        <File Id="TTSMixmasterExe" 
+              Source="dist\TTSMixmaster\TTSMixmaster.exe" 
+              KeyPath="yes" />
+        
+        <!-- Start Menu Shortcut -->
+        <Shortcut Id="StartMenuShortcut" 
+                  Name="TTSMixmaster" 
+                  Target="[INSTALLFOLDER]TTSMixmaster.exe" 
+                  Directory="ApplicationProgramsFolder"
+                  Description="TTSMixmaster - Last.fm to Tabletop Simulator Integration"
+                  WorkingDirectory="INSTALLFOLDER" />
+        
+        <!-- Desktop Shortcut -->
+        <Shortcut Id="DesktopShortcut" 
+                  Name="TTSMixmaster" 
+                  Target="[INSTALLFOLDER]TTSMixmaster.exe" 
+                  Directory="DesktopFolder"
+                  Description="TTSMixmaster - Last.fm to Tabletop Simulator Integration"
+                  WorkingDirectory="INSTALLFOLDER" />
+        
+        <!-- Registry entry for uninstaller -->
+        <RegistryValue Root="HKCU" 
+                       Key="Software\TTSMixmaster" 
+                       Name="Installed" 
+                       Type="string" 
+                       Value="yes" 
+                       KeyPath="no"/>
+        
+        <!-- Clean up shortcuts on uninstall -->
+        <RemoveFolder Id="RemoveProgramsFolder" 
+                      Directory="ApplicationProgramsFolder" 
+                      On="uninstall"/>
+      </Component>
+      
+      <!-- Add additional files if needed -->
+      <Component Id="ConfigFiles" Guid="*">
+        <!-- Add config files, documentation, etc. here if needed -->
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>
