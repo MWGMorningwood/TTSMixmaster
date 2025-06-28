@@ -243,47 +243,19 @@ jobs:
         timestamp-rfc3161: http://timestamp.acs.microsoft.com
         timestamp-digest: SHA256
     
-    - name: Create ZIP archive
-      run: |
-        $version = "${{ steps.get_version.outputs.version }}"
-        $zipName = "TTSMixmaster-v$version-Portable.zip"
-        
-        # Create a temporary directory for the portable version
-        $portableDir = "portable_temp"
-        New-Item -ItemType Directory -Path $portableDir -Force
-        
-        # Copy only the single executable
-        Copy-Item "dist\TTSMixmaster.exe" "$portableDir\TTSMixmaster.exe"
-        
-        # Create the ZIP with just the single executable
-        Compress-Archive -Path "$portableDir\*" -DestinationPath "dist\$zipName"
-        
-        # Clean up temp directory
-        Remove-Item -Recurse -Force $portableDir
-        
-        echo "zip_path=dist\$zipName" >> $env:GITHUB_OUTPUT
-        echo "zip_name=$zipName" >> $env:GITHUB_OUTPUT
-        
-        # Verify the ZIP contents
-        echo "ZIP file contents:"
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-        $zip = [System.IO.Compression.ZipFile]::OpenRead("dist\$zipName")
-        $zip.Entries | ForEach-Object { echo "  - $($_.Name) ($($_.Length) bytes)" }
-        $zip.Dispose()
-      shell: pwsh
-      id: create_zip
+
     
     - name: Set artifacts output
       id: artifacts
       run: |
-        $zip = "${{ steps.create_zip.outputs.zip_path }}"
         $msi = "${{ steps.create_msi.outputs.msi_path }}"
+        $exe = "dist\TTSMixmaster.exe"
         
         $artifacts = @{
-          zip_path = $zip
-          zip_name = "${{ steps.create_zip.outputs.zip_name }}"
           msi_path = $msi
           msi_name = "${{ steps.create_msi.outputs.msi_name }}"
+          exe_path = $exe
+          exe_name = "TTSMixmaster.exe"
         } | ConvertTo-Json -Compress
         
         echo "artifacts=$artifacts" >> $env:GITHUB_OUTPUT
@@ -295,7 +267,6 @@ jobs:
         name: TTSMixmaster-Build-v${{ steps.get_version.outputs.version }}
         path: |
           dist/TTSMixmaster-v*-Setup.msi
-          dist/TTSMixmaster-v*-Portable.zip
           dist/TTSMixmaster.exe
           dist_installer/TTSMixmaster-installer/
         retention-days: 30
@@ -373,7 +344,7 @@ jobs:
         ## Downloads
         
         - **TTSMixmaster-v${{ needs.build.outputs.version }}-Setup.msi** - Windows installer (recommended)
-        - **TTSMixmaster-v${{ needs.build.outputs.version }}-Portable.zip** - Portable version
+        - **TTSMixmaster.exe** - Portable single-file executable
         
         ## Installation
         
@@ -384,9 +355,8 @@ jobs:
         4. Launch TTSMixmaster from the Start Menu or Desktop shortcut
         
         ### Portable Version
-        1. Download the \`.zip\` file
-        2. Extract to a folder of your choice
-        3. Run \`TTSMixmaster.exe\`
+        1. Download \`TTSMixmaster.exe\`
+        2. Run the executable directly - no installation required!
         
         ## System Requirements
         
@@ -417,7 +387,7 @@ jobs:
         prerelease: false
         files: |
           ./artifacts/TTSMixmaster-v*-Setup.msi
-          ./artifacts/TTSMixmaster-v*-Portable.zip
+          ./artifacts/TTSMixmaster.exe
         token: ${{ secrets.GITHUB_TOKEN }}
         fail_on_unmatched_files: true
     
