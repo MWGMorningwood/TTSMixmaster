@@ -203,50 +203,13 @@ jobs:
       run: |
         $version = "${{ steps.get_version.outputs.version }}"
         
-        # Convert version to 4-part format required by WiX v4
-        $versionParts = $version.Split('.')
-        if ($versionParts.Length -eq 3) {
-          $wixVersion = "$version.0"
-        } elseif ($versionParts.Length -eq 2) {
-          $wixVersion = "$version.0.0"
-        } elseif ($versionParts.Length -eq 1) {
-          $wixVersion = "$version.0.0.0"
-        } else {
-          $wixVersion = $version
-        }
-        
         echo "Building MSI with WiX..."
-        echo "=== Using heat tool to harvest dist directory ==="
-        
-        # Use heat to harvest all files from the PyInstaller dist directory
-        wix extension add WixToolset.Heat.wixext
-        wix heat dir "dist\TTSMixmaster" -out "HarvestedFiles.wxs" -ag -cg HarvestedFiles -dr INSTALLFOLDER -srd -sfrag -var "var.SourceDir"
-        
-        echo "=== Generated heat file (first 20 lines) ==="
-        Get-Content "HarvestedFiles.wxs" | Select-Object -First 20
+        echo "=== WiX Source File (first 10 lines) ==="
+        Get-Content "TTSMixmaster.wxs" | Select-Object -First 10
         echo "=============================="
         
-        # Copy and update the main WiX file
-        Copy-Item "installer\TTSMixmaster.wxs" "TTSMixmaster.wxs"
-        
-        # Replace the version in the WiX file
-        $content = Get-Content "TTSMixmaster.wxs" -Raw
-        $content = $content -replace 'Version="1\.0\.0\.0"', "Version=`"$wixVersion`""
-        
-        # Add reference to harvested files
-        $content = $content -replace '</Package>', @"
-    <Feature Id="HarvestedFiles" Title="Application Files" Level="1">
-      <ComponentGroupRef Id="HarvestedFiles" />
-    </Feature>
-  </Package>
-"@
-        
-        Set-Content "TTSMixmaster.wxs" -Value $content -Encoding UTF8
-        
-        echo "WiX source file prepared with version: $wixVersion"
-        
-        # Build the MSI with both the main file and harvested files
-        wix build TTSMixmaster.wxs HarvestedFiles.wxs -out "dist\TTSMixmaster-v$version-Setup.msi" -arch x64 -v -dSourceDir="dist\TTSMixmaster"
+        # Build the MSI
+        wix build TTSMixmaster.wxs -out "dist\TTSMixmaster-v$version-Setup.msi" -arch x64 -v
         
         # Verify MSI was created
         if (Test-Path "dist\TTSMixmaster-v$version-Setup.msi") {

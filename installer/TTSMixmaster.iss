@@ -39,8 +39,7 @@ LicenseFile=..\LICENSE
 InfoAfterFile=..\docs\INSTALLATION.md
 OutputDir=..\dist
 OutputBaseFilename=TTSMixmaster-Setup-{#MyAppVersion}
-; Use system default icon if our icon doesn't exist
-; SetupIconFile=..\assets\icon.ico
+SetupIconFile=..\assets\icon.ico
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
