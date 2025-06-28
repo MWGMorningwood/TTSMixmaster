@@ -198,6 +198,24 @@ jobs:
         echo "Version line in WiX file: $($versionLine.Trim())"
       shell: pwsh
     
+    - name: Generate WiX file list with Heat
+      run: |
+        echo "Generating file list from PyInstaller output..."
+        
+        # Use WiX Heat to harvest files from the installer directory
+        wix extension add WixToolset.Heat.wixext
+        
+        # Generate component definitions for all files in the installer directory
+        wix heat dir "dist_installer\TTSMixmaster-installer" -out "harvested-files.wxs" -cg "HarvestedFiles" -dr "INSTALLFOLDER" -var "var.SourceDir" -gg -sfrag -srd
+        
+        echo "Generated harvested-files.wxs with all PyInstaller files"
+        
+        # Show first few lines for verification
+        echo "=== First 10 lines of harvested-files.wxs ==="
+        Get-Content "harvested-files.wxs" | Select-Object -First 10
+        echo "=============================="
+      shell: pwsh
+    
     - name: Build MSI with WiX
       run: |
         $version = "${{ steps.get_version.outputs.version }}"
@@ -207,8 +225,8 @@ jobs:
         Get-Content "TTSMixmaster.wxs" | Select-Object -First 10
         echo "=============================="
         
-        # Build the MSI
-        wix build TTSMixmaster.wxs -out "dist\TTSMixmaster-v$version-Setup.msi" -arch x64 -v
+        # Build the MSI including harvested files
+        wix build TTSMixmaster.wxs harvested-files.wxs -out "dist\TTSMixmaster-v$version-Setup.msi" -arch x64 -d SourceDir="dist_installer\TTSMixmaster-installer" -v
         
         # Verify MSI was created
         if (Test-Path "dist\TTSMixmaster-v$version-Setup.msi") {
