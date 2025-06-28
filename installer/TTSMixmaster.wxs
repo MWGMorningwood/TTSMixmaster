@@ -28,7 +28,8 @@
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
       <Component Id="MainExecutable" Guid="*">
         <File Id="TTSMixmasterExe" 
-              Source="dist\TTSMixmaster\TTSMixmaster.exe" 
+              Source="dist_installer\TTSMixmaster-installer\TTSMixmaster-installer.exe" 
+              Name="TTSMixmaster.exe"
               KeyPath="yes" />
         
         <!-- Start Menu Shortcut -->
@@ -61,11 +62,10 @@
                       On="uninstall"/>
       </Component>
       
-      <!-- Additional component for future use - commented out until needed
-      <Component Id="ConfigFiles" Guid="12345678-1234-1234-1234-123456789012">
-        <File Id="ConfigFile" Source="config.json" KeyPath="yes" />
+      <!-- Additional files from installer build -->
+      <Component Id="AdditionalFiles" Guid="22345678-2234-2234-2234-223456789012">
+        <!-- We'll copy all additional files from the installer build -->
       </Component>
-      -->
     </ComponentGroup>
   </Fragment>
 </Wix>

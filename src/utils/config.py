@@ -11,8 +11,8 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 from dataclasses import dataclass, asdict
-from dotenv import load_dotenv
 import configparser
+
 
 
 @dataclass
@@ -76,13 +76,11 @@ class ConfigManager:
         self.config_file = Path(config_file)
         self.config = AppConfig()
         
-        # Load environment variables
-        load_dotenv()
-          # Load configuration
+        # Load configuration
         self.load_config()
     
     def load_config(self):
-        """Load configuration from file and environment variables"""
+        """Load configuration from file"""
         # Load from file if it exists
         if self.config_file.exists():
             try:
@@ -91,39 +89,8 @@ class ConfigManager:
                     self.config = AppConfig.from_dict(data)
             except Exception as e:
                 logging.warning(f"Failed to load config file: {e}")
-        
-        # Override with environment variables
-        self._load_from_env()
     
-    def _load_from_env(self):
-        """Load configuration from environment variables"""
-        env_mapping = {
-            'LASTFM_API_KEY': 'lastfm_api_key',
-            'LASTFM_API_SECRET': 'lastfm_api_secret',
-            'LASTFM_USERNAME': 'lastfm_username',
-            'YOUTUBE_API_KEY': 'youtube_api_key',
-            'YOUTUBE_CHANNEL_ID': 'youtube_channel_id',
-            'SPOTIFY_CLIENT_ID': 'spotify_client_id',
-            'SPOTIFY_CLIENT_SECRET': 'spotify_client_secret',
-            'SPOTIFY_USER_ID': 'spotify_user_id',
-            'STEAM_API_KEY': 'steam_api_key',
-            'STEAM_USERNAME': 'steam_username',
-            'AZURE_STORAGE_CONNECTION_STRING': 'azure_storage_connection_string',
-            'AZURE_CONTAINER_NAME': 'azure_container_name',
-            'DOWNLOAD_PATH': 'download_path',
-            'UPLOAD_PATH': 'upload_path',
-            'TTS_OUTPUT_PATH': 'tts_output_path',
-            'AUDIO_QUALITY': 'audio_quality',
-            'AUDIO_FORMAT': 'audio_format',
-            'THEME': 'theme',
-            'WINDOW_SIZE': 'window_size'
-        }
-        
-        for env_var, config_attr in env_mapping.items():
-            value = os.getenv(env_var)
-            if value:
-                setattr(self.config, config_attr, value)
-    
+
     def save_config(self):
         """Save configuration to file"""
         try:
