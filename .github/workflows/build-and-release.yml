@@ -30,7 +30,6 @@ jobs:
     
     outputs:
       version: ${{ steps.get_version.outputs.version }}
-      artifacts: ${{ steps.artifacts.outputs.artifacts }}
     
     steps:
     - name: Checkout code
@@ -244,23 +243,6 @@ jobs:
         timestamp-digest: SHA256
     
 
-    
-    - name: Set artifacts output
-      id: artifacts
-      run: |
-        $msi = "${{ steps.create_msi.outputs.msi_path }}"
-        $exe = "dist\TTSMixmaster.exe"
-        
-        $artifacts = @{
-          msi_path = $msi
-          msi_name = "${{ steps.create_msi.outputs.msi_name }}"
-          exe_path = $exe
-          exe_name = "TTSMixmaster.exe"
-        } | ConvertTo-Json -Compress
-        
-        echo "artifacts=$artifacts" >> $env:GITHUB_OUTPUT
-      shell: pwsh
-    
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -293,8 +275,11 @@ jobs:
         echo "=== Verifying downloaded artifacts ==="
         ls -la ./artifacts/
         echo ""
-        echo "=== Checking for MSI and ZIP files ==="
-        find ./artifacts -name "*.msi" -o -name "*.zip"
+        echo "=== Checking artifact directory structure (recursive) ==="
+        find ./artifacts -type f -name "*.msi" -o -name "*.exe" -o -name "*.zip" | head -20
+        echo ""
+        echo "=== Full directory tree ==="
+        tree ./artifacts/ || find ./artifacts -type f | head -20
         echo ""
         echo "=== GitHub Token Info ==="
         echo "Actor: ${{ github.actor }}"
@@ -386,8 +371,8 @@ jobs:
         draft: false
         prerelease: false
         files: |
-          ./artifacts/TTSMixmaster-v*-Setup.msi
-          ./artifacts/TTSMixmaster.exe
+          ./artifacts/dist/TTSMixmaster-v*-Setup.msi
+          ./artifacts/dist/TTSMixmaster.exe
         token: ${{ secrets.GITHUB_TOKEN }}
         fail_on_unmatched_files: true
     
