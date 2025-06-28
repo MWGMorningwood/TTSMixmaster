@@ -82,63 +82,43 @@ jobs:
     
     - name: Build with PyInstaller
       run: |
-        # Build using the spec file for better dependency handling
-        pyinstaller TTSMixmaster.spec --clean --noconfirm
-        if (-not (Test-Path "dist\TTSMixmaster\TTSMixmaster.exe")) {
-          throw "Build failed - executable not found"
+        # Build single-file portable executable
+        pyinstaller TTSMixmaster-onefile.spec --clean --noconfirm
+        
+        # Verify single executable was created
+        if (-not (Test-Path "dist\TTSMixmaster.exe")) {
+          throw "Single-file build failed - executable not found"
         }
         
-        # Verify that the _internal directory exists and has content
-        if (-not (Test-Path "dist\TTSMixmaster\_internal")) {
-          throw "Build failed - _internal directory missing"
+        # Also build directory version for installer
+        pyinstaller main.py --name 'TTSMixmaster-installer' --clean --noconfirm --distpath dist_installer
+        if (-not (Test-Path "dist_installer\TTSMixmaster-installer\TTSMixmaster-installer.exe")) {
+          throw "Installer build failed - executable not found"
         }
         
-        $internalFiles = Get-ChildItem "dist\TTSMixmaster\_internal" -File | Measure-Object
-        if ($internalFiles.Count -eq 0) {
-          throw "Build failed - _internal directory is empty"
-        }
-        
-        echo "Build completed successfully"
-        echo "_internal directory contains $($internalFiles.Count) files"
+        echo "Both builds completed successfully"
       shell: pwsh
     
     - name: Verify build
       run: |
-        $exePath = "dist\TTSMixmaster\TTSMixmaster.exe"
-        $internalPath = "dist\TTSMixmaster\_internal"
-        
-        if (Test-Path $exePath) {
-          $fileInfo = Get-Item $exePath
-          echo "✅ Executable found: $($fileInfo.Length) bytes"
-          echo "✅ Executable created: $($fileInfo.CreationTime)"
+        # Check single-file executable
+        $singleExe = "dist\TTSMixmaster.exe"
+        if (Test-Path $singleExe) {
+          $fileInfo = Get-Item $singleExe
+          echo "Single-file executable size: $($fileInfo.Length) bytes"
+          echo "Single-file executable created: $($fileInfo.CreationTime)"
         } else {
-          throw "❌ Executable not found at $exePath"
+          throw "Single-file executable not found at $singleExe"
         }
         
-        if (Test-Path $internalPath) {
-          $internalFiles = Get-ChildItem $internalPath -Recurse -File
-          echo "✅ _internal directory found with $($internalFiles.Count) files"
-          echo "✅ _internal directory size: $(($internalFiles | Measure-Object -Property Length -Sum).Sum) bytes"
-          
-          # List some key files that should be present
-          $keyFiles = @("base_library.zip", "python*.dll", "*.pyd")
-          foreach ($pattern in $keyFiles) {
-            $found = Get-ChildItem $internalPath -Recurse -File -Name $pattern
-            if ($found) {
-              echo "✅ Found critical files matching $pattern"
-            }
-          }
+        # Check installer executable
+        $installerExe = "dist_installer\TTSMixmaster-installer\TTSMixmaster-installer.exe"
+        if (Test-Path $installerExe) {
+          $fileInfo = Get-Item $installerExe
+          echo "Installer executable size: $($fileInfo.Length) bytes"
+          echo "Installer executable created: $($fileInfo.CreationTime)"
         } else {
-          throw "❌ _internal directory not found at $internalPath"
-        }
-        
-        # Verify total build size is reasonable (should be > 50MB for a full Python app)
-        $totalSize = (Get-ChildItem "dist\TTSMixmaster" -Recurse -File | Measure-Object -Property Length -Sum).Sum
-        $totalSizeMB = [math]::Round($totalSize / 1MB, 2)
-        echo "✅ Total build size: $totalSizeMB MB"
-        
-        if ($totalSizeMB -lt 30) {
-          Write-Warning "⚠️  Build size seems small ($totalSizeMB MB), may be missing dependencies"
+          throw "Installer executable not found at $installerExe"
         }
       shell: pwsh
     
@@ -151,7 +131,24 @@ jobs:
         endpoint: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
         trusted-signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
         certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
-        files-folder: dist\TTSMixmaster
+        files-folder: dist
+        files-folder-filter: exe
+        files-folder-recurse: false
+        files-folder-depth: 1
+        file-digest: SHA256
+        timestamp-rfc3161: http://timestamp.acs.microsoft.com
+        timestamp-digest: SHA256
+    
+    - name: Sign installer executable with Azure Trusted Signing
+      uses: azure/trusted-signing-action@v0.4.0
+      with:
+        azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+        endpoint: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+        trusted-signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+        certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
+        files-folder: dist_installer\TTSMixmaster-installer
         files-folder-filter: exe
         files-folder-recurse: false
         files-folder-depth: 1
@@ -283,27 +280,19 @@ jobs:
         timestamp-rfc3161: http://timestamp.acs.microsoft.com
         timestamp-digest: SHA256
     
-    - name: Create ZIP archive
-      run: |
-        $version = "${{ steps.get_version.outputs.version }}"
-        $zipName = "TTSMixmaster-v$version-Portable.zip"
-        Compress-Archive -Path "dist\TTSMixmaster\*" -DestinationPath "dist\$zipName"
-        echo "zip_path=dist\$zipName" >> $env:GITHUB_OUTPUT
-        echo "zip_name=$zipName" >> $env:GITHUB_OUTPUT
-      shell: pwsh
-      id: create_zip
+
     
     - name: Set artifacts output
       id: artifacts
       run: |
-        $zip = "${{ steps.create_zip.outputs.zip_path }}"
         $msi = "${{ steps.create_msi.outputs.msi_path }}"
+        $exe = "dist\TTSMixmaster.exe"
         
         $artifacts = @{
-          zip_path = $zip
-          zip_name = "${{ steps.create_zip.outputs.zip_name }}"
           msi_path = $msi
           msi_name = "${{ steps.create_msi.outputs.msi_name }}"
+          exe_path = $exe
+          exe_name = "TTSMixmaster.exe"
         } | ConvertTo-Json -Compress
         
         echo "artifacts=$artifacts" >> $env:GITHUB_OUTPUT
@@ -315,8 +304,8 @@ jobs:
         name: TTSMixmaster-Build-v${{ steps.get_version.outputs.version }}
         path: |
           dist/TTSMixmaster-v*-Setup.msi
-          dist/TTSMixmaster-v*-Portable.zip
-          dist/TTSMixmaster/
+          dist/TTSMixmaster.exe
+          dist_installer/TTSMixmaster-installer/
         retention-days: 30
 
   release:
@@ -392,7 +381,7 @@ jobs:
         ## Downloads
         
         - **TTSMixmaster-v${{ needs.build.outputs.version }}-Setup.msi** - Windows installer (recommended)
-        - **TTSMixmaster-v${{ needs.build.outputs.version }}-Portable.zip** - Portable version
+        - **TTSMixmaster.exe** - Portable single-file executable
         
         ## Installation
         
@@ -403,9 +392,8 @@ jobs:
         4. Launch TTSMixmaster from the Start Menu or Desktop shortcut
         
         ### Portable Version
-        1. Download the \`.zip\` file
-        2. Extract to a folder of your choice
-        3. Run \`TTSMixmaster.exe\`
+        1. Download \`TTSMixmaster.exe\`
+        2. Run the executable directly - no installation required!
         
         ## System Requirements
         
@@ -436,7 +424,7 @@ jobs:
         prerelease: false
         files: |
           ./artifacts/TTSMixmaster-v*-Setup.msi
-          ./artifacts/TTSMixmaster-v*-Portable.zip
+          ./artifacts/TTSMixmaster.exe
         token: ${{ secrets.GITHUB_TOKEN }}
         fail_on_unmatched_files: true
     

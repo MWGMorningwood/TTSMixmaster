@@ -29,7 +29,8 @@
       <!-- Main executable with shortcuts -->
       <Component Id="MainExecutable" Guid="*">
         <File Id="TTSMixmasterExe" 
-              Source="dist\TTSMixmaster\TTSMixmaster.exe" 
+              Source="dist_installer\TTSMixmaster-installer\TTSMixmaster-installer.exe" 
+              Name="TTSMixmaster.exe"
               KeyPath="yes" />
         
         <!-- Start Menu Shortcut -->
@@ -71,6 +72,10 @@
       
       <!-- This will be replaced by heat-generated file list -->
       <!-- Heat will be used to auto-generate components for all files in dist\TTSMixmaster -->
+      <!-- Additional files from installer build -->
+      <Component Id="AdditionalFiles" Guid="22345678-2234-2234-2234-223456789012">
+        <!-- We'll copy all additional files from the installer build -->
+      </Component>
     </ComponentGroup>
   </Fragment>
 </Wix>
