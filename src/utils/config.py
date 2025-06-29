@@ -9,7 +9,7 @@ import os
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, asdict
 import configparser
 
@@ -320,6 +320,135 @@ class ProgressTracker:
         """String representation"""
         percentage = self.get_percentage()
         return f"{self.description}: {self.current}/{self.total} ({percentage:.1f}%)"
+
+
+def get_playlist_folder_path(base_path: str, playlist_name: str) -> Path:
+    """
+    Get the folder path for a specific playlist
+    
+    Args:
+        base_path: Base download/upload path
+        playlist_name: Name of the playlist
+        
+    Returns:
+        Path object for the playlist folder
+    """
+    sanitized_name = sanitize_filename(playlist_name)
+    return Path(base_path) / sanitized_name
+
+
+def create_playlist_directories(config: AppConfig, playlist_name: str) -> Dict[str, Path]:
+    """
+    Create necessary directories for a playlist
+    
+    Args:
+        config: Application configuration
+        playlist_name: Name of the playlist
+        
+    Returns:
+        Dictionary with paths for downloads, uploads, and TTS output
+    """
+    playlist_paths = {
+        'download': get_playlist_folder_path(config.download_path, playlist_name),
+        'upload': get_playlist_folder_path(config.upload_path, playlist_name), 
+        'tts_output': get_playlist_folder_path(config.tts_output_path, playlist_name)
+    }
+    
+    # Create all directories
+    for path in playlist_paths.values():
+        path.mkdir(parents=True, exist_ok=True)
+    
+    return playlist_paths
+
+
+def save_playlist_manifest(playlist_folder: Path, playlist_info, tracks_downloaded: List = None) -> Path:
+    """
+    Save a text manifest of playlist tracks for completeness checking
+    
+    Args:
+        playlist_folder: Path to the playlist folder
+        playlist_info: PlaylistInfo object
+        tracks_downloaded: List of successfully downloaded tracks
+        
+    Returns:
+        Path to the created manifest file
+    """
+    from ..api.base_service import PlaylistInfo, Track
+    
+    manifest_path = playlist_folder / "playlist_manifest.txt"
+    
+    with open(manifest_path, 'w', encoding='utf-8') as f:
+        f.write(f"Playlist: {playlist_info.name}\n")
+        f.write(f"Service: {playlist_info.service_type.value}\n")
+        f.write(f"Total Tracks: {len(playlist_info.tracks)}\n")
+        if tracks_downloaded is not None:
+            f.write(f"Downloaded: {len(tracks_downloaded)}\n")
+        f.write(f"Created: {format_duration(0)}\n\n")  # Will use current time
+        
+        f.write("=== TRACK LIST ===\n")
+        for i, track in enumerate(playlist_info.tracks, 1):
+            status = ""
+            if tracks_downloaded is not None:
+                status = " ✓" if track in tracks_downloaded else " ✗"
+            f.write(f"{i:3d}. {track.artist} - {track.title}{status}\n")
+            if track.album:
+                f.write(f"     Album: {track.album}\n")
+        
+        if tracks_downloaded is not None:
+            f.write(f"\n=== DOWNLOAD SUMMARY ===\n")
+            f.write(f"Successfully downloaded: {len(tracks_downloaded)}/{len(playlist_info.tracks)} tracks\n")
+            failed_tracks = [t for t in playlist_info.tracks if t not in tracks_downloaded]
+            if failed_tracks:
+                f.write(f"\nFailed downloads:\n")
+                for track in failed_tracks:
+                    f.write(f"- {track.artist} - {track.title}\n")
+    
+    return manifest_path
+
+
+def get_playlist_completeness(playlist_folder: Path) -> Dict[str, Any]:
+    """
+    Check completeness of a downloaded playlist
+    
+    Args:
+        playlist_folder: Path to the playlist folder
+        
+    Returns:
+        Dictionary with completeness information
+    """
+    manifest_path = playlist_folder / "playlist_manifest.txt"
+    
+    if not manifest_path.exists():
+        return {"error": "No manifest file found"}
+    
+    # Count audio files in the folder
+    audio_files = [f for f in playlist_folder.iterdir() if is_audio_file(str(f))]
+    
+    # Parse manifest for expected track count
+    try:
+        with open(manifest_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+        # Extract total tracks from manifest
+        import re
+        total_match = re.search(r"Total Tracks:\s*(\d+)", content)
+        total_tracks = int(total_match.group(1)) if total_match else 0
+        
+        # Extract downloaded count if present
+        downloaded_match = re.search(r"Downloaded:\s*(\d+)", content)
+        downloaded_tracks = int(downloaded_match.group(1)) if downloaded_match else len(audio_files)
+        
+        return {
+            "total_expected": total_tracks,
+            "downloaded": downloaded_tracks,
+            "audio_files_found": len(audio_files),
+            "completion_rate": (len(audio_files) / total_tracks * 100) if total_tracks > 0 else 0,
+            "is_complete": len(audio_files) >= total_tracks,
+            "manifest_path": str(manifest_path)
+        }
+        
+    except Exception as e:
+        return {"error": f"Failed to parse manifest: {e}"}
 
 
 def create_backup(file_path: str, backup_dir: str = "./backups") -> Optional[str]:

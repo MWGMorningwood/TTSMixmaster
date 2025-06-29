@@ -739,11 +739,13 @@ class TTSMixmasterApp:
         def download_worker():
             try:
                 # Get tracks from the new playlist tab manager
+                playlist_info = None
                 if self.playlist_tab_manager:
                     selected_playlist = self.playlist_tab_manager.get_selected_playlist()
                     if selected_playlist and selected_playlist.tracks:
                         all_tracks = selected_playlist.tracks
                         playlist_name = selected_playlist.name
+                        playlist_info = selected_playlist  # Store for playlist-specific download
                     else:
                         # Fallback to any loaded tracks from playlist tab
                         all_tracks = self.playlist_tab_manager.get_selected_playlist_tracks()
@@ -776,25 +778,48 @@ class TTSMixmasterApp:
                         self.config.audio_quality
                     )
                 
-                # Update progress
-                self.download_progress.set(0)
-                total_tracks = len(all_tracks)                # Download tracks
-                self.download_results = []
-                for i, track in enumerate(all_tracks):
-                    self._update_status(f"Downloading {i+1}/{total_tracks}: {track.artist} - {track.title}")
+                # Use playlist-specific download if we have a single playlist
+                if playlist_info:
+                    # Download to playlist-specific folder
+                    from ..utils.config import create_playlist_directories
+                    playlist_paths = create_playlist_directories(self.config, playlist_name)
                     
-                    result = self.downloader.search_and_download_track(track)
-                    self.download_results.append(result)
+                    self._update_status(f"Downloading to playlist folder: {playlist_paths['download']}")
                     
-                    # Update progress
-                    progress = (i + 1) / total_tracks
-                    self.download_progress.set(progress)
+                    # Use the new playlist download method
+                    self.download_results = self.downloader.download_playlist(
+                        playlist_info, 
+                        playlist_paths['download']
+                    )
                     
-                    # Update results display
+                    # Update progress for display
+                    self.download_progress.set(1.0)
                     self._update_download_results()
-                
-                stats = self.downloader.get_download_statistics(self.download_results)
-                self._update_status(f"Download complete: {stats['successful_downloads']}/{stats['total_tracks']} successful")
+                    
+                    stats = self.downloader.get_download_statistics(self.download_results)
+                    self._update_status(f"Playlist download complete: {stats['successful_downloads']}/{stats['total_tracks']} successful in {playlist_paths['download']}")
+                    
+                else:
+                    # Fallback to individual track downloads (legacy mode)
+                    self.download_progress.set(0)
+                    total_tracks = len(all_tracks)
+                    
+                    self.download_results = []
+                    for i, track in enumerate(all_tracks):
+                        self._update_status(f"Downloading {i+1}/{total_tracks}: {track.artist} - {track.title}")
+                        
+                        result = self.downloader.search_and_download_track(track)
+                        self.download_results.append(result)
+                        
+                        # Update progress
+                        progress = (i + 1) / total_tracks
+                        self.download_progress.set(progress)
+                        
+                        # Update results display
+                        self._update_download_results()
+                    
+                    stats = self.downloader.get_download_statistics(self.download_results)
+                    self._update_status(f"Download complete: {stats['successful_downloads']}/{stats['total_tracks']} successful")
                 
             except Exception as e:
                 messagebox.showerror("Error", f"Download failed: {e}")
@@ -827,9 +852,44 @@ class TTSMixmasterApp:
         self.download_results_text.insert(tk.END, f"\nSummary: {successful} successful, {failed} failed")
     
     def _prepare_uploads(self):
-        """Prepare upload folders"""
-        # Implementation for preparing upload folders
-        self._update_status("Upload folders prepared")
+        """Prepare upload folders from playlist downloads"""
+        try:
+            # Check if we have playlist folders to work with
+            if hasattr(self, 'playlist_tab_manager') and self.playlist_tab_manager:
+                selected_playlist = self.playlist_tab_manager.get_selected_playlist()
+                if selected_playlist:
+                    from ..utils.config import create_playlist_directories
+                    playlist_paths = create_playlist_directories(self.config, selected_playlist.name)
+                    
+                    # Copy audio files from download folder to upload folder
+                    download_folder = playlist_paths['download']
+                    upload_folder = playlist_paths['upload']
+                    
+                    if download_folder.exists():
+                        from ..utils.config import is_audio_file
+                        import shutil
+                        
+                        audio_files = [f for f in download_folder.iterdir() if is_audio_file(str(f))]
+                        
+                        for audio_file in audio_files:
+                            dest_file = upload_folder / audio_file.name
+                            if not dest_file.exists():
+                                shutil.copy2(audio_file, dest_file)
+                        
+                        # Copy manifest file too
+                        manifest_file = download_folder / "playlist_manifest.txt"
+                        if manifest_file.exists():
+                            shutil.copy2(manifest_file, upload_folder / "playlist_manifest.txt")
+                        
+                        self._update_status(f"Prepared {len(audio_files)} files for upload from playlist: {selected_playlist.name}")
+                        return
+            
+            # Fallback to legacy preparation
+            self._update_status("Upload folders prepared")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to prepare uploads: {e}")
+            self._update_status("Upload preparation failed")
     
     def _start_upload(self):
         """Start uploading to Azure Blob Storage"""
@@ -934,7 +994,7 @@ Status: {status}        """.strip().format(
         text_widget.insert("1.0", instructions)
     
     def _generate_tts_code(self):
-        """Generate TTS code"""
+        """Generate TTS code using playlist folders"""
         import json
         try:
             # Get playlist from the new playlist tab manager
@@ -949,20 +1009,28 @@ Status: {status}        """.strip().format(
                     return
                 selected_playlist = self.current_playlists[0]  # Use first legacy playlist as fallback
             
-            # Initialize formatter
+            # Get playlist-specific paths
+            from ..utils.config import create_playlist_directories, is_audio_file
+            playlist_paths = create_playlist_directories(self.config, selected_playlist.name)
+            
+            # Initialize formatter with playlist-specific TTS output path
             if not self.formatter:
-                self.formatter = TTSFormatter(self.config.tts_output_path)
+                self.formatter = TTSFormatter(str(playlist_paths['tts_output']))
             
             # Create music player with upload results if available, otherwise use local files
             if self.upload_results:
                 music_player = self.formatter.create_music_player_from_playlist_info(selected_playlist, upload_results=self.upload_results)
             else:
-                # Use download results or just create player without URLs
+                # Look for audio files in the playlist download folder
                 local_files = []
-                if self.download_results:
-                    # Filter out None values and failed downloads
+                if playlist_paths['download'].exists():
+                    audio_files = [str(f) for f in playlist_paths['download'].iterdir() if is_audio_file(str(f))]
+                    local_files = audio_files
+                elif self.download_results:
+                    # Fallback to download results
                     local_files = [result.file_path for result in self.download_results 
                                    if result.success and result.file_path is not None]
+                
                 music_player = self.formatter.create_music_player_from_playlist_info(selected_playlist, local_files=local_files)
             
             # Get customization options
@@ -973,6 +1041,10 @@ Status: {status}        """.strip().format(
             use_simple_format = self.use_simple_format_var.get()
             output_format = self.output_format_var.get()
             
+            # Set default nickname if empty
+            if not nickname:
+                nickname = f"{selected_playlist.name} Music Player"
+            
             # Generate appropriate code based on format
             if output_format == "lua":
                 if use_simple_format:
@@ -982,67 +1054,47 @@ Status: {status}        """.strip().format(
             elif output_format == "json":
                 code = self.formatter.generate_json_data(music_player)
             elif output_format == "save_file":
+                # Generate full save file and display the path
                 save_data = self.formatter.generate_save_file(
-                    music_player=music_player,
+                    music_player, 
+                    nickname=nickname, 
+                    description=description,
+                    use_simple_format=use_simple_format,
+                    image_url=image_url,
+                    image_secondary_url=image_secondary_url
+                )
+                code = json.dumps(save_data, indent=2)
+            else:
+                code = "Unknown format selected"
+            
+            # Display in text widget
+            self.tts_output_text.delete("1.0", "end")
+            self.tts_output_text.insert("1.0", code)
+            
+            # Save to playlist TTS folder
+            if output_format != "save_file":
+                base_filename = f"{selected_playlist.name.replace(' ', '_')}"
+                saved_files = self.formatter.save_formatted_files(
+                    music_player,
+                    base_filename=base_filename,
                     nickname=nickname,
                     description=description,
                     use_simple_format=use_simple_format,
                     image_url=image_url,
                     image_secondary_url=image_secondary_url
                 )
-                code = json.dumps(save_data, indent=2, ensure_ascii=False)
-            else:  # "all"
-                # Generate all formats
-                if use_simple_format:
-                    lua_code = self.formatter.generate_simple_playlist_lua(music_player)
-                else:
-                    lua_code = self.formatter.generate_lua_script(music_player)
                 
-                json_code = self.formatter.generate_json_data(music_player)
-                save_data = self.formatter.generate_save_file(
-                    music_player=music_player,
-                    nickname=nickname,
-                    description=description,
-                    use_simple_format=use_simple_format,
-                    image_url=image_url,
-                    image_secondary_url=image_secondary_url
-                )
-                save_code = json.dumps(save_data, indent=2, ensure_ascii=False)
+                self._update_status(f"TTS files generated and saved to: {playlist_paths['tts_output']}")
                 
-                code = f"=== LUA SCRIPT ===\n{lua_code}\n\n=== JSON DATA ===\n{json_code}\n\n=== TTS SAVE FILE ===\n{save_code}"
-            
-            # Display in preview
-            self.tts_preview_text.delete("1.0", tk.END)
-            self.tts_preview_text.insert("1.0", code)
-              # Save files with custom options
-            saved_files = self.formatter.save_formatted_files(
-                music_player=music_player,
-                nickname=nickname,
-                description=description,
-                use_simple_format=use_simple_format,
-                image_url=image_url,
-                image_secondary_url=image_secondary_url
-            )
-            
-            self._update_status(f"TTS code generated and saved to {len(saved_files)} files")
-            
-            # Show success message with details
-            message = f"TTS files generated successfully!\n\nFiles saved:\n"
-            for file_type, file_path in saved_files.items():
-                message += f"- {file_type}: {Path(file_path).name}\n"
-            
-            if nickname:
-                message += f"\nNickname: {nickname}"
-            if description:
-                message += f"\nDescription: {description}"
-            
-            message += f"\nFormat: {'Simple Playlist' if use_simple_format else 'Full Music Player'}"
-            
-            messagebox.showinfo("Success", message)
-            
+                # Show saved files info
+                files_info = "\n".join([f"{key}: {path}" for key, path in saved_files.items()])
+                messagebox.showinfo("Files Saved", f"Generated files:\n\n{files_info}")
+            else:
+                self._update_status(f"TTS save file code generated for playlist: {selected_playlist.name}")
+                
         except Exception as e:
             messagebox.showerror("Error", f"Failed to generate TTS code: {e}")
-            self._update_status(f"TTS code generation failed: {str(e)}")
+            self._update_status("TTS generation failed")
     
     def _open_output_folder(self):
         """Open TTS output folder"""

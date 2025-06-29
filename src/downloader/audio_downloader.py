@@ -178,13 +178,15 @@ class AudioDownloader:
         
         return filename
     
-    def search_and_download_track(self, track: Track, search_engines: Optional[List[str]] = None) -> DownloadResult:
+    def search_and_download_track(self, track: Track, search_engines: Optional[List[str]] = None,
+                                  playlist_folder: Optional[Path] = None) -> DownloadResult:
         """
         Search for and download a track from various sources
         
         Args:
             track: Track object to download
             search_engines: List of search engines to use (youtube, soundcloud, etc.)
+            playlist_folder: Optional specific folder for playlist-organized downloads
             
         Returns:
             DownloadResult object
@@ -196,9 +198,13 @@ class AudioDownloader:
                 error_message="yt-dlp is not available. Please install it to enable downloads."
             )
         
+        # Determine download path - use playlist folder if provided, otherwise default
+        download_path = playlist_folder if playlist_folder is not None else self.download_path
+        download_path.mkdir(parents=True, exist_ok=True)
+        
         # Check if file already exists - if so, skip download (ONE FILE PER SONG)
         expected_filename = self.sanitize_filename(f"{track.artist} - {track.title}.mp3")
-        expected_path = self.download_path / expected_filename
+        expected_path = download_path / expected_filename
         
         if expected_path.exists():
             self.logger.info(f"File already exists, skipping download: {expected_filename}")
@@ -221,7 +227,7 @@ class AudioDownloader:
         # Try each search engine
         for engine in search_engines:
             try:
-                result = self._download_from_engine(track, query, engine)
+                result = self._download_from_engine(track, query, engine, download_path)
                 if result.success:
                     return result
             except Exception as e:
@@ -233,7 +239,52 @@ class AudioDownloader:
             track=track,
             error_message="Could not find track on any supported platform"
         )
-    def _download_from_engine(self, track: Track, query: str, engine: str) -> DownloadResult:
+
+    def download_playlist(self, playlist_info, playlist_folder: Path, 
+                         search_engines: Optional[List[str]] = None) -> List[DownloadResult]:
+        """
+        Download all tracks from a playlist to a specific folder
+        
+        Args:
+            playlist_info: PlaylistInfo object containing tracks
+            playlist_folder: Folder path for the playlist downloads
+            search_engines: List of search engines to use
+            
+        Returns:
+            List of DownloadResult objects
+        """
+        from ..utils.config import save_playlist_manifest
+        
+        # Ensure playlist folder exists
+        playlist_folder.mkdir(parents=True, exist_ok=True)
+        
+        results = []
+        downloaded_tracks = []
+        
+        self.logger.info(f"Starting download of {len(playlist_info.tracks)} tracks to {playlist_folder}")
+        
+        for i, track in enumerate(playlist_info.tracks):
+            self.logger.info(f"Downloading {i+1}/{len(playlist_info.tracks)}: {track.artist} - {track.title}")
+            
+            result = self.search_and_download_track(
+                track, 
+                search_engines=search_engines, 
+                playlist_folder=playlist_folder
+            )
+            results.append(result)
+            
+            if result.success:
+                downloaded_tracks.append(track)
+        
+        # Save playlist manifest with download results
+        save_playlist_manifest(playlist_folder, playlist_info, downloaded_tracks)
+        
+        successful = len(downloaded_tracks)
+        total = len(playlist_info.tracks)
+        self.logger.info(f"Playlist download complete: {successful}/{total} tracks downloaded to {playlist_folder}")
+        
+        return results
+    def _download_from_engine(self, track: Track, query: str, engine: str, download_path: Path = None) -> DownloadResult:
         """
         Download from a specific search engine
         
@@ -241,6 +292,7 @@ class AudioDownloader:
             track: Track object
             query: Search query
             engine: Search engine name
+            download_path: Specific download path (defaults to self.download_path)
             
         Returns:
             DownloadResult object
@@ -251,6 +303,9 @@ class AudioDownloader:
                 track=track,
                 error_message="yt-dlp is not available"
             )
+        
+        if download_path is None:
+            download_path = self.download_path
             
         search_url = self._get_search_url(query, engine)
         
@@ -298,28 +353,24 @@ class AudioDownloader:
                     if self.ffmpeg_available:
                         final_filename = self.sanitize_filename(f"{track.artist} - {track.title}.mp3")
                     else:
-                        # Keep original extension if FFmpeg not available
-                        original_ext = downloaded_file.suffix or '.mp3'
+                        # Keep original extension if FFmpeg is not available
+                        original_ext = downloaded_file.suffix
                         final_filename = self.sanitize_filename(f"{track.artist} - {track.title}{original_ext}")
                     
-                    final_path = self.download_path / final_filename
+                    # Move file to final destination
+                    final_path = download_path / final_filename
+                    
+                    # Ensure destination directory exists
+                    final_path.parent.mkdir(parents=True, exist_ok=True)
                     
                     # Move the file
-                    downloaded_file.rename(final_path)
+                    downloaded_file.replace(final_path)
                     
-                    # Only try post-processing if FFmpeg is available
-                    if self.ffmpeg_available:
-                        # Convert to mono
-                        self.convert_to_mono(str(final_path))
-                        
-                        # Enhance metadata
-                        self.enhance_metadata(str(final_path), track)
-                    else:
-                        self.logger.info("Skipping post-processing (FFmpeg not available)")
-                    
-                    # Get file info (after processing)
+                    # Get file info
                     file_size = final_path.stat().st_size
                     duration = info.get('duration', 0.0) if info else 0.0
+                    
+                    self.logger.info(f"Successfully downloaded: {final_filename}")
                     
                     return DownloadResult(
                         success=True,
@@ -328,6 +379,14 @@ class AudioDownloader:
                         duration=duration,
                         file_size=file_size
                     )
+                    
+            except Exception as e:
+                self.logger.error(f"Failed to download from {engine}: {e}")
+                return DownloadResult(
+                    success=False,
+                    track=track,
+                    error_message=f"Download failed: {e}"
+                )
                     
             except Exception as e:
                 self.logger.error(f"Download failed: {e}")
