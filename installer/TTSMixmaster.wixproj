@@ -21,7 +21,7 @@
       <GenerateGuidsNow>false</GenerateGuidsNow>
       <SuppressFragments>false</SuppressFragments>
       <PreprocessorVariable>var.SourceDir</PreprocessorVariable>
-    </HarvestedDirectory>
+    </HarvestDirectory>
   </ItemGroup>
 
   <ItemGroup>
