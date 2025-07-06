@@ -29,7 +29,7 @@
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
       <Component Id="MainExecutable" Guid="*">
         <File Id="TTSMixmasterExe" 
-              Source="$(PyInstallerOutputDir)\TTSMixmaster-installer.exe" 
+              Source="$(var.SourceDir)\TTSMixmaster-installer.exe" 
               Name="TTSMixmaster.exe"
               KeyPath="yes" />
         
