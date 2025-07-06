@@ -119,14 +119,18 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
-# Environments
+# Configuration files with secrets
+config.json
 .env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+.env.*
+credentials.json
+secrets.json
+
+# TTSMixmaster specific
+downloads/
+uploads/
+tts_formatted/
+*.log
 
 # Spyder project settings
 .spyderproject

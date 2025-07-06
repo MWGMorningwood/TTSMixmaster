@@ -8,12 +8,34 @@ current_dir = Path('.').resolve()
 
 block_cipher = None
 
+# Exclude unnecessary modules to reduce size
+excludes = [
+    'tkinter.test',
+    'unittest',
+    'email',
+    'http',
+    'urllib',
+    'xml',
+    'xmlrpc',
+    'pydoc',
+    'doctest',
+    'zipfile',
+    'tarfile',
+    'calendar',
+    'pdb',
+    'inspect',
+    'dis',
+    'pickle',
+    'subprocess',
+    'multiprocessing'
+]
+
 a = Analysis(
     ['main.py'],
     pathex=[str(current_dir)],
     binaries=[],
     datas=[
-        # Include any data files here if needed
+        ('config.json.template', '.'),  # Include template, not actual config
     ],
     hiddenimports=[
         'tkinter',
@@ -35,11 +57,13 @@ a = Analysis(
         'beautifulsoup4',
         'lxml',
         'configparser',
+        'dotenv',
+        'imageio_ffmpeg',
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=excludes,
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -69,4 +93,5 @@ exe = EXE(
     entitlements_file=None,
     icon=None,  # Add icon path if you have one
     onefile=True,  # This creates a single-file executable
+    version_file=None,  # Consider adding version info
 )
