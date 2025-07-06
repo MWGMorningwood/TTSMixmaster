@@ -1,0 +1,31 @@
+<Project Sdk="WixToolset.Sdk/4.0.5">
+  <PropertyGroup>
+    <OutputName>TTSMixmaster-v$(Version)-Setup</OutputName>
+    <OutputType>Package</OutputType>
+    <PlatformTarget>x64</PlatformTarget>
+    <!-- Version will be passed from GitHub Actions -->
+    <Version Condition="'$(Version)' == ''">1.0.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference our main WiX source file -->
+    <Compile Include="TTSMixmaster.wxs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Harvest the PyInstaller output directory -->
+    <HarvestDirectory Include="$(PyInstallerOutputDir)">
+      <ComponentGroupName>HarvestedFiles</ComponentGroupName>
+      <DirectoryRefId>INSTALLFOLDER</DirectoryRefId>
+      <SuppressRootDirectory>true</SuppressRootDirectory>
+      <GenerateGuidsNow>false</GenerateGuidsNow>
+      <SuppressFragments>false</SuppressFragments>
+      <PreprocessorVariable>var.SourceDir</PreprocessorVariable>
+    </HarvestedDirectory>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Include the WiX Heat package for directory harvesting -->
+    <PackageReference Include="WixToolset.Heat" />
+  </ItemGroup>
+</Project>
