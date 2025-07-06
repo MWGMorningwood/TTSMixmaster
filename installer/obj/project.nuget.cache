@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "dgSpecHash": "rqw0pRtNIc0=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\Logan\\source\\repos\\TTSMixmaster\\installer\\TTSMixmaster.wixproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Logan\\.nuget\\packages\\wixtoolset.heat\\4.0.0\\wixtoolset.heat.4.0.0.nupkg.sha512"
+  ],
+  "logs": [
+    {
+      "code": "NU1604",
+      "level": "Warning",
+      "warningLevel": 1,
+      "message": "Project dependency WixToolset.Heat does not contain an inclusive lower bound. Include a lower bound in the dependency version to ensure consistent restore results.",
+      "libraryId": "WixToolset.Heat",
+      "targetGraphs": [
+        "native,Version=v0.0"
+      ]
+    }
+  ]
+}

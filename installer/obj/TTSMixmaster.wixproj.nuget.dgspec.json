@@ -1,0 +1,57 @@
+{
+  "format": 1,
+  "restore": {
+    "C:\\Users\\Logan\\source\\repos\\TTSMixmaster\\installer\\TTSMixmaster.wixproj": {}
+  },
+  "projects": {
+    "C:\\Users\\Logan\\source\\repos\\TTSMixmaster\\installer\\TTSMixmaster.wixproj": {
+      "version": "1.0.4",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\Logan\\source\\repos\\TTSMixmaster\\installer\\TTSMixmaster.wixproj",
+        "projectName": "TTSMixmaster-v1.0.4.0-Setup",
+        "projectPath": "C:\\Users\\Logan\\source\\repos\\TTSMixmaster\\installer\\TTSMixmaster.wixproj",
+        "packagesPath": "C:\\Users\\Logan\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\Logan\\source\\repos\\TTSMixmaster\\installer\\obj\\",
+        "projectStyle": "PackageReference",
+        "UsingMicrosoftNETSdk": false,
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\Logan\\NuGet.Config",
+          "C:\\Users\\Logan\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "native"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "native": {
+            "targetAlias": "native",
+            "projectReferences": {}
+          }
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "native": {
+          "targetAlias": "native",
+          "dependencies": {
+            "WixToolset.Heat": {
+              "target": "Package",
+              "version": "(, )"
+            }
+          }
+        }
+      }
+    }
+  }
+}

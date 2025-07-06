@@ -1,0 +1,7 @@
+C:\Users\Logan\source\repos\TTSMixmaster\installer\bin\Release\TTSMixmaster-v1.0.4.0-Setup.msi
+C:\Users\Logan\source\repos\TTSMixmaster\installer\bin\Release\TTSMixmaster-v1.0.4.0-Setup.wixpdb
+C:\Users\Logan\source\repos\TTSMixmaster\installer\obj\Release\TTSMixmaster.wixproj.CoreCompileInputs.cache
+C:\Users\Logan\source\repos\TTSMixmaster\installer\obj\Release\_HarvestedFiles_dir.wxs
+C:\Users\Logan\source\repos\TTSMixmaster\installer\obj\Release\TTSMixmaster-v1.0.4.0-Setup.msi
+C:\Users\Logan\source\repos\TTSMixmaster\installer\obj\Release\TTSMixmaster-v1.0.4.0-Setup.wixpdb
+C:\Users\Logan\source\repos\TTSMixmaster\installer\obj\Release\TTSMixmaster.wixproj.BindTracking-neutral.txt
