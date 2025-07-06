@@ -165,7 +165,7 @@ jobs:
         echo "WiX Toolset installed successfully"
       shell: pwsh
     
-    - name: Prepare WiX source file
+    - name: Build MSI with WiX MSBuild
       run: |
         $version = "${{ steps.get_version.outputs.version }}"
         
@@ -181,68 +181,51 @@ jobs:
           $wixVersion = $version
         }
         
-        echo "Converting version '$version' to WiX format: '$wixVersion'"
+        echo "Building MSI with WiX MSBuild integration..."
+        echo "Version: $wixVersion"
+        echo "PyInstaller output: dist_installer\TTSMixmaster-installer"
         
-        # Copy the template WiX file and update the version
-        Copy-Item "installer\TTSMixmaster.wxs" "TTSMixmaster.wxs"
+        # Build using MSBuild with the .wixproj file
+        # This will automatically harvest files using HarvestDirectory
+        cd installer
+        dotnet build TTSMixmaster.wixproj -c Release -p:Version=$wixVersion -p:PyInstallerOutputDir="..\dist_installer\TTSMixmaster-installer" -v:normal
         
-        # Replace the version in the WiX file
-        $content = Get-Content "TTSMixmaster.wxs" -Raw
-        $content = $content -replace 'Version="1\.0\.0\.0"', "Version=`"$wixVersion`""
-        Set-Content "TTSMixmaster.wxs" -Value $content -Encoding UTF8
-        
-        echo "WiX source file prepared with version: $wixVersion"
-        
-        # Verify the version was updated
-        $versionLine = (Get-Content "TTSMixmaster.wxs") | Where-Object { $_ -match "Version=" } | Select-Object -First 1
-        echo "Version line in WiX file: $($versionLine.Trim())"
-      shell: pwsh
-    
-    - name: Generate WiX file list with Heat
-      run: |
-        echo "Generating file list from PyInstaller output..."
-        
-        # Add WiX Heat extension
-        wix extension add WixToolset.Heat.wixext
-        
-        # In WiX v4, heat functionality is integrated into the build process
-        # Let's try using the heat command directly first
-        try {
-          wix heat dir "dist_installer\TTSMixmaster-installer" -out "harvested-files.wxs" -cg "HarvestedFiles" -dr "INSTALLFOLDER" -var "var.SourceDir" -gg -sfrag -srd
-        } catch {
-          echo "⚠️  Standard heat command failed, trying alternative approach..."
-          
-          # Alternative: Create a minimal harvested file and rely on manual component definition
-          $files = Get-ChildItem "dist_installer\TTSMixmaster-installer" -Recurse -File
-          echo "Found $($files.Count) files to include in installer"
-          
-          # Create a basic harvested file structure
-          $content = '<?xml version="1.0" encoding="UTF-8"?>'
-          $content += '<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">'
-          $content += '  <Fragment>'
-          $content += '    <ComponentGroup Id="HarvestedFiles">'
-          $content += '      <!-- This will be populated by the main WiX file -->'
-          $content += '    </ComponentGroup>'
-          $content += '  </Fragment>'
-          $content += '</Wix>'
-          
-          Set-Content "harvested-files.wxs" -Value $content -Encoding UTF8
-          echo "Created placeholder harvested-files.wxs"
-        }
-        
-        if (Test-Path "harvested-files.wxs") {
-          echo "✅ harvested-files.wxs exists"
-          
-          # Show first few lines for verification
-          echo "=== First 10 lines of harvested-files.wxs ==="
-          Get-Content "harvested-files.wxs" | Select-Object -First 10
-          echo "=============================="
+        # Move the MSI to the expected location
+        $msiFile = "bin\Release\TTSMixmaster-v$version-Setup.msi"
+        if (Test-Path $msiFile) {
+          Copy-Item $msiFile "..\dist\TTSMixmaster-v$version-Setup.msi"
+          $msiInfo = Get-Item "..\dist\TTSMixmaster-v$version-Setup.msi"
+          echo "✅ MSI created successfully: $($msiInfo.Name)"
+          echo "📦 MSI size: $($msiInfo.Length) bytes"
+          echo "msi_path=dist\TTSMixmaster-v$version-Setup.msi" >> $env:GITHUB_OUTPUT
+          echo "msi_name=TTSMixmaster-v$version-Setup.msi" >> $env:GITHUB_OUTPUT
         } else {
-          echo "❌ Failed to create harvested-files.wxs"
-          throw "Could not create harvested-files.wxs"
+          echo "❌ MSI file not found at $msiFile"
+          echo "Listing installer bin directory:"
+          Get-ChildItem "bin" -Recurse -ErrorAction SilentlyContinue
+          throw "MSI creation failed - file not found"
         }
+        
+        cd ..
       shell: pwsh
+      id: create_msi
     
+    - name: Sign MSI with Azure Trusted Signing
+      uses: azure/trusted-signing-action@v0.4.0
+      with:
+        azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+        endpoint: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+        trusted-signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+        certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
+        files-folder: dist
+        files-folder-filter: msi
+        files-folder-recurse: false
+        files-folder-depth: 1
+        file-digest: SHA256
+        timestamp-rfc3161: http://timestamp.acs.microsoft.com
+        timestamp-digest: SHA256
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4

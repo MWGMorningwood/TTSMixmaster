@@ -2,7 +2,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="TTSMixmaster" 
            Language="1033" 
-           Version="1.0.0.0" 
+           Version="$(Version)" 
            Manufacturer="Morningwood Gaming LLC" 
            UpgradeCode="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">
     
@@ -29,7 +29,7 @@
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
       <Component Id="MainExecutable" Guid="*">
         <File Id="TTSMixmasterExe" 
-              Source="$(var.SourceDir)\TTSMixmaster-installer.exe" 
+              Source="$(PyInstallerOutputDir)\TTSMixmaster-installer.exe" 
               Name="TTSMixmaster.exe"
               KeyPath="yes" />
         
